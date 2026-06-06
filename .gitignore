@@ -1,0 +1,13 @@
+.codeflowiq/
+
+bin/
+obj/
+.vs/
+.idea/
+
+TestResults/
+coverage/
+
+*.user
+*.suo
+*.rsuser

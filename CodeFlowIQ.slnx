@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CodeFlowIQ.Analyzers/CodeFlowIQ.Analyzers.csproj" />
+    <Project Path="src/CodeFlowIQ.Cli/CodeFlowIQ.Cli.csproj" />
+    <Project Path="src/CodeFlowIQ.Core/CodeFlowIQ.Core.csproj" />
+    <Project Path="src/CodeFlowIQ.Data/CodeFlowIQ.Data.csproj" />
+    <Project Path="src/CodeFlowIQ.Git/CodeFlowIQ.Git.csproj" />
+    <Project Path="src/CodeFlowIQ.Indexing/CodeFlowIQ.Indexing.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CodeFlowIQ.Tests/CodeFlowIQ.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\CodeFlowIQ.Core\CodeFlowIQ.Core.csproj" />
+    <ProjectReference Include="..\CodeFlowIQ.Data\CodeFlowIQ.Data.csproj" />
+    <ProjectReference Include="..\CodeFlowIQ.Analyzers\CodeFlowIQ.Analyzers.csproj" />
+    <ProjectReference Include="..\CodeFlowIQ.Git\CodeFlowIQ.Git.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.8" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

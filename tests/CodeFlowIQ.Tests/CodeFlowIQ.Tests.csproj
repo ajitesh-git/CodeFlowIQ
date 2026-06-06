@@ -1,0 +1,29 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\CodeFlowIQ.Core\CodeFlowIQ.Core.csproj" />
+    <ProjectReference Include="..\..\src\CodeFlowIQ.Data\CodeFlowIQ.Data.csproj" />
+    <ProjectReference Include="..\..\src\CodeFlowIQ.Indexing\CodeFlowIQ.Indexing.csproj" />
+    <ProjectReference Include="..\..\src\CodeFlowIQ.Analyzers\CodeFlowIQ.Analyzers.csproj" />
+    <ProjectReference Include="..\..\src\CodeFlowIQ.Git\CodeFlowIQ.Git.csproj" />
+  </ItemGroup>
+
+</Project>
