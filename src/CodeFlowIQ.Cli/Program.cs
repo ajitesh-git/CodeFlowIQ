@@ -146,8 +146,9 @@ static async Task RunStatusAsync(IWorkspaceQueryService queryService, string wor
 static async Task RunFilesAsync(IWorkspaceQueryService queryService, string workspacePath, string[] args, CancellationToken cancellationToken)
 {
     var language = GetOption(args, "--language");
+    var folder = GetOption(args, "--folder");
     var take = GetIntOption(args, "--take", 200);
-    var rows = await queryService.ListFilesAsync(workspacePath, language, take, cancellationToken);
+    var rows = await queryService.ListFilesAsync(workspacePath, language, folder, take, cancellationToken);
     foreach (var row in rows)
     {
         Console.WriteLine(row);
@@ -384,7 +385,7 @@ static void WriteHelp()
     Console.WriteLine("  codeflowiq init <workspace-path>");
     Console.WriteLine("  codeflowiq sync [--path <workspace-path>]");
     Console.WriteLine("  codeflowiq status [--path <workspace-path>]");
-    Console.WriteLine("  codeflowiq files [--language <language-id>] [--path <workspace-path>]");
+    Console.WriteLine("  codeflowiq files [--language <language-id>] [--folder <folder-text>] [--path <workspace-path>]");
     Console.WriteLine("  codeflowiq symbols <search-text> [--take <n>] [--path <workspace-path>]");
     Console.WriteLine("  codeflowiq relationships [search-text] [--kind <kind>] [--source <text>] [--target <text>] [--take <n>] [--include-tests true|false] [--path <workspace-path>]");
     Console.WriteLine("  codeflowiq apis [--method <GET|POST|...>] [--route <text>] [--controller <text>] [--take <n>] [--include-tests true|false] [--path <workspace-path>]");
