@@ -1,0 +1,32 @@
+.panel-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.list-panel {
+  background: #ffffff;
+  border: 1px solid #d7e0e8;
+  min-width: 0;
+  padding: 16px;
+}
+
+.list-panel h2 {
+  font-size: 16px;
+  margin: 0 0 12px;
+}
+
+.list-row {
+  align-items: center;
+  border-top: 1px solid #edf1f5;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 34px;
+}
+
+.list-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

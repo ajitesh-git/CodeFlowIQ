@@ -3,6 +3,8 @@ type MetricProps = {
   value?: number | string;
 };
 
+import "./common.css";
+
 export function Metric({ label, value }: MetricProps) {
   return (
     <div className="metric">

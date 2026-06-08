@@ -1,5 +1,6 @@
 import { EmptyState } from "../../components/common/EmptyState";
 import type { WorkspaceSummary } from "../../types";
+import "./summary.css";
 
 export function SummaryPanel({ summary }: { summary: WorkspaceSummary | null }) {
   return (

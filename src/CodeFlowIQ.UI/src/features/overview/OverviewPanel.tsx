@@ -1,6 +1,7 @@
 import { BookOpen, Compass, RefreshCw, Search } from "lucide-react";
 import { EmptyState } from "../../components/common/EmptyState";
 import type { OverviewSection, RepositoryOverview, RepositoryOverviewItem } from "../../types";
+import "./overview.css";
 
 type OverviewPanelProps = {
   overview: RepositoryOverview | null;

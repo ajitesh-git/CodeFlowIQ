@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { EmptyState } from "./EmptyState";
+import "./common.css";
 
 type ResultExplorerProps = {
   emptyLabel: string;

@@ -3,6 +3,8 @@ type ToggleProps = {
   checked?: boolean;
 };
 
+import "./common.css";
+
 export function Toggle({ label, checked = false }: ToggleProps) {
   return (
     <label className="toggle-row">

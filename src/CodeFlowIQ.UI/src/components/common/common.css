@@ -1,0 +1,156 @@
+.toggle-row {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.toggle-row input {
+  accent-color: #2bb0a8;
+}
+
+.metric {
+  background: #ffffff;
+  border: 1px solid #d7e0e8;
+  display: grid;
+  gap: 5px;
+  min-height: 78px;
+  padding: 14px;
+}
+
+.metric strong {
+  color: #172231;
+  font-size: 24px;
+  font-weight: 760;
+  overflow-wrap: anywhere;
+}
+
+.flow-layout,
+.placeholder-panel {
+  background: #ffffff;
+  border: 1px solid #d7e0e8;
+  min-width: 0;
+}
+
+.flow-layout {
+  display: grid;
+  gap: 0;
+}
+
+.toolbar {
+  align-items: end;
+  background: #f7f9fb;
+  border-bottom: 1px solid #d7e0e8;
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+}
+
+.toolbar button {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+  padding: 0 14px;
+}
+
+.toolbar label {
+  flex: 1;
+}
+
+.toolbar .short-field {
+  flex: 0 0 88px;
+}
+
+.toolbar .short-field input {
+  width: 88px;
+}
+
+.segmented {
+  align-items: center;
+}
+
+.segmented button {
+  min-width: 112px;
+}
+
+.row-list {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.result-explorer {
+  display: grid;
+  min-width: 0;
+}
+
+.result-explorer-bar {
+  align-items: end;
+  background: #ffffff;
+  border-bottom: 1px solid #edf1f5;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(260px, 1fr) auto;
+  padding: 14px;
+}
+
+.result-explorer-bar label {
+  min-width: 0;
+}
+
+.result-explorer-bar div {
+  align-items: end;
+  display: grid;
+  gap: 3px;
+  justify-items: end;
+  min-width: 150px;
+}
+
+.result-explorer-bar strong {
+  color: #172231;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.result-explorer-bar span {
+  color: #718094;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.row-list code {
+  background: #f5f7fa;
+  border: 1px solid #d7e0e8;
+  color: #243246;
+  display: block;
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  padding: 9px 10px;
+}
+
+.placeholder-panel {
+  align-items: center;
+  color: #526174;
+  display: grid;
+  justify-items: center;
+  min-height: 280px;
+  padding: 24px;
+  text-align: center;
+}
+
+.placeholder-panel h2 {
+  font-size: 16px;
+  margin: 0 0 12px;
+}
+
+.placeholder-panel p {
+  max-width: 460px;
+}
+
+.empty-state {
+  align-items: center;
+  color: #748296;
+  display: flex;
+  min-height: 88px;
+}
