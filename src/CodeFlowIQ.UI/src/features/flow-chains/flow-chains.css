@@ -5,8 +5,8 @@
 }
 
 .chain-card {
-  background: #ffffff;
-  border: 1px solid #d7e0e8;
+  background: var(--surface);
+  border: 1px solid var(--border);
 }
 
 .chain-card summary {
@@ -26,13 +26,13 @@
 }
 
 .chain-card summary strong {
-  color: #526174;
+  color: var(--text-muted);
   font-size: 12px;
   font-weight: 650;
 }
 
 .chain-overview {
-  border-top: 1px solid #edf1f5;
+  border-top: 1px solid var(--app-bg);
   display: grid;
   gap: 12px;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto;
@@ -46,16 +46,16 @@
 }
 
 .chain-overview span {
-  color: #718094;
+  color: var(--text-faint);
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
 }
 
 .chain-overview strong {
-  background: #f5f7fa;
-  border: 1px solid #d7e0e8;
-  color: #243246;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  color: var(--text-code);
   font-size: 13px;
   font-weight: 700;
   min-width: 0;
@@ -84,38 +84,38 @@
 
 .stage-chip.frontend,
 .stage-marker.frontend {
-  background: #dbeafe;
-  color: #1e4e8c;
+  background: var(--stage-frontend-bg);
+  color: var(--stage-frontend-text);
 }
 
 .stage-chip.api,
 .stage-marker.api {
-  background: #e0f2fe;
-  color: #075985;
+  background: var(--stage-api-bg);
+  color: var(--stage-api-text);
 }
 
 .stage-chip.backend,
 .stage-marker.backend {
-  background: #ede9fe;
-  color: #5b21b6;
+  background: var(--stage-backend-bg);
+  color: var(--stage-backend-text);
 }
 
 .stage-chip.database,
 .stage-marker.database {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--stage-database-bg);
+  color: var(--stage-database-text);
 }
 
 .stage-chip.azure,
 .stage-marker.azure {
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--stage-azure-bg);
+  color: var(--stage-azure-text);
 }
 
 .stage-chip.unknown,
 .stage-marker.unknown {
-  background: #e5e7eb;
-  color: #374151;
+  background: var(--stage-unknown-bg);
+  color: var(--stage-unknown-text);
 }
 
 .copy-chain {
@@ -128,7 +128,7 @@
 }
 
 .flow-story {
-  border-top: 1px solid #edf1f5;
+  border-top: 1px solid var(--app-bg);
   display: grid;
   gap: 0;
   list-style: none;
@@ -146,7 +146,7 @@
 }
 
 .story-step::after {
-  background: #d7e0e8;
+  background: var(--border);
   bottom: -10px;
   content: "";
   left: 16px;
@@ -160,8 +160,8 @@
 }
 
 .story-step div {
-  background: #fbfcfd;
-  border: 1px solid #d7e0e8;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
   display: grid;
   gap: 4px;
   min-width: 0;
@@ -169,25 +169,25 @@
 }
 
 .story-step strong {
-  color: #172231;
+  color: var(--text-strong);
   font-size: 13px;
   font-weight: 760;
   overflow-wrap: anywhere;
 }
 
 .story-step div span {
-  color: #66758a;
+  color: var(--text-soft);
   font-size: 12px;
   overflow-wrap: anywhere;
 }
 
 .technical-trace {
-  border-top: 1px solid #edf1f5;
+  border-top: 1px solid var(--app-bg);
 }
 
 .technical-trace > summary {
   align-items: center;
-  color: #526174;
+  color: var(--text-muted);
   cursor: pointer;
   display: flex;
   font-size: 12px;
@@ -224,8 +224,8 @@
 }
 
 .edge-label {
-  background: #e6f4f1;
-  color: #17675a;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
   font-size: 11px;
   font-weight: 700;
   min-width: 0;
@@ -236,28 +236,28 @@
 }
 
 .edge-label.resolve {
-  background: #f3e8ff;
-  color: #6b21a8;
+  background: var(--stage-backend-bg);
+  color: var(--stage-backend-text);
 }
 
 .edge-label.data {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--stage-database-bg);
+  color: var(--stage-database-text);
 }
 
 .edge-label.api {
-  background: #e0f2fe;
-  color: #075985;
+  background: var(--stage-api-bg);
+  color: var(--stage-api-text);
 }
 
 .edge-label.code {
-  background: #e6f4f1;
-  color: #17675a;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
 }
 
 .chain-steps code {
-  background: #111923;
-  color: #d9f6f0;
+  background: var(--code-bg);
+  color: var(--code-text);
   display: block;
   font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
   font-size: 12px;
@@ -269,21 +269,21 @@
 }
 
 .chain-step.frontend code {
-  border-left: 4px solid #60a5fa;
+  border-left: 4px solid var(--stage-frontend-text);
 }
 
 .chain-step.api code {
-  border-left: 4px solid #38bdf8;
+  border-left: 4px solid var(--stage-api-text);
 }
 
 .chain-step.backend code {
-  border-left: 4px solid #a78bfa;
+  border-left: 4px solid var(--stage-backend-text);
 }
 
 .chain-step.database code {
-  border-left: 4px solid #4ade80;
+  border-left: 4px solid var(--stage-database-text);
 }
 
 .chain-step.azure code {
-  border-left: 4px solid #f59e0b;
+  border-left: 4px solid var(--stage-azure-text);
 }

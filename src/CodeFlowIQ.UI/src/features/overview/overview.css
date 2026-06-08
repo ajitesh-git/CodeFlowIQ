@@ -7,8 +7,8 @@
 .overview-hero,
 .learning-path,
 .overview-list {
-  background: #ffffff;
-  border: 1px solid #d7e0e8;
+  background: var(--surface);
+  border: 1px solid var(--border);
   min-width: 0;
 }
 
@@ -35,7 +35,7 @@
 
 .overview-empty p,
 .overview-hero p {
-  color: #526174;
+  color: var(--text-muted);
   margin: 0;
 }
 
@@ -63,14 +63,14 @@
 
 .overview-hero span,
 .section-heading span {
-  color: #718094;
+  color: var(--text-faint);
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
 }
 
 .overview-hero h2 {
-  color: #172231;
+  color: var(--text-strong);
   font-size: 26px;
   line-height: 1.15;
   overflow-wrap: anywhere;
@@ -89,7 +89,7 @@
 }
 
 .section-heading h3 {
-  color: #172231;
+  color: var(--text-strong);
   font-size: 15px;
 }
 
@@ -113,8 +113,8 @@
 
 .learning-path li::before {
   align-items: center;
-  background: #2bb0a8;
-  color: #061112;
+  background: var(--accent);
+  color: var(--accent-contrast);
   content: counter(path);
   display: flex;
   font-size: 13px;
@@ -126,8 +126,8 @@
 
 .learning-path-button {
   align-items: start;
-  background: #f7f9fb;
-  border: 1px solid #d7e0e8;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
   display: grid;
   gap: 4px;
   grid-column: 2;
@@ -142,8 +142,8 @@
 .learning-path-button:focus-visible,
 .overview-drill-card:hover,
 .overview-drill-card:focus-visible {
-  border-color: #2bb0a8;
-  box-shadow: inset 3px 0 0 #2bb0a8;
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
   outline: none;
 }
 
@@ -154,14 +154,14 @@
 
 .learning-path li strong,
 .overview-drill-card strong {
-  color: #172231;
+  color: var(--text-strong);
   font-size: 13px;
   overflow-wrap: anywhere;
 }
 
 .learning-path li span,
 .overview-drill-card span {
-  color: #66758a;
+  color: var(--text-soft);
   font-size: 12px;
   overflow-wrap: anywhere;
 }
@@ -183,9 +183,9 @@
 
 .browse-section-button {
   align-items: center;
-  background: #f7f9fb;
-  border-color: #d7e0e8;
-  color: #17675a;
+  background: var(--surface-muted);
+  border-color: var(--border);
+  color: var(--accent-strong);
   display: inline-flex;
   gap: 8px;
   justify-content: center;
@@ -195,14 +195,14 @@
 
 .browse-section-button:hover,
 .browse-section-button:focus-visible {
-  border-color: #2bb0a8;
+  border-color: var(--accent);
   outline: none;
 }
 
 .overview-drill-card {
   align-items: start;
-  background: #fbfcfd;
-  border: 1px solid #d7e0e8;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
   display: grid;
   gap: 4px;
   justify-items: start;

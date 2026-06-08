@@ -10,12 +10,22 @@ import type {
   WorkspaceSummary
 } from "../types";
 import type { AppPanel, OverviewNavigation } from "../features/overview";
+import type { RepositoryExplorerRows, RepositoryExplorerSurface } from "../features/repository-explorer";
 import { getOverviewItemNavigation, getOverviewSectionNavigation } from "../features/overview/overviewRouting";
 
 const defaultRuntimeConnection = getDefaultRuntimeConnection();
 const defaultWorkspacePath = localStorage.getItem("codeflowiq.workspacePath") ?? "";
+type ThemeMode = "light" | "dark";
+const defaultTheme = (localStorage.getItem("codeflowiq.theme") === "dark" ? "dark" : "light") satisfies ThemeMode;
+const emptyRepositoryExplorerRows: RepositoryExplorerRows = {
+  files: [],
+  apis: [],
+  backend: [],
+  azure: []
+};
 
 export function useWorkspaceData() {
+  const [theme, setTheme] = useState<ThemeMode>(defaultTheme);
   const [apiBaseUrl, setApiBaseUrl] = useState(defaultRuntimeConnection.baseUrl);
   const [apiSource, setApiSource] = useState(defaultRuntimeConnection.source);
   const [workspacePath, setWorkspacePath] = useState(defaultWorkspacePath);
@@ -30,6 +40,9 @@ export function useWorkspaceData() {
   const [apiRows, setApiRows] = useState<string[]>([]);
   const [azureRows, setAzureRows] = useState<string[]>([]);
   const [fileRows, setFileRows] = useState<string[]>([]);
+  const [repositoryExplorerSurface, setRepositoryExplorerSurface] = useState<RepositoryExplorerSurface>("files");
+  const [repositoryExplorerRows, setRepositoryExplorerRows] =
+    useState<RepositoryExplorerRows>(emptyRepositoryExplorerRows);
   const [azureFilter, setAzureFilter] = useState("");
   const [fileLanguageFilter, setFileLanguageFilter] = useState("");
   const [fileFolderFilter, setFileFolderFilter] = useState("");
@@ -46,6 +59,11 @@ export function useWorkspaceData() {
   useEffect(() => {
     void checkHealth();
   }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("codeflowiq.theme", theme);
+  }, [theme]);
 
   async function runTask<T>(label: string, task: () => Promise<T>): Promise<T | null> {
     setBusy(label);
@@ -159,6 +177,45 @@ export function useWorkspaceData() {
     }
   }
 
+  async function loadRepositoryExplorerSurface(surface = repositoryExplorerSurface) {
+    const result = await runTask(`Loading ${surface} explorer`, () => loadRepositoryExplorerRows(surface));
+    if (result) {
+      setRepositoryExplorerRows((current) => ({ ...current, [surface]: result }));
+    }
+  }
+
+  async function loadRepositoryExplorerAll() {
+    const result = await runTask("Loading repository explorer", async () => {
+      const [files, apis, backend, azure] = await Promise.all([
+        loadRepositoryExplorerRows("files"),
+        loadRepositoryExplorerRows("apis"),
+        loadRepositoryExplorerRows("backend"),
+        loadRepositoryExplorerRows("azure")
+      ]);
+
+      return { files, apis, backend, azure } satisfies RepositoryExplorerRows;
+    });
+    if (result) {
+      setRepositoryExplorerRows(result);
+    }
+  }
+
+  function loadRepositoryExplorerRows(surface: RepositoryExplorerSurface) {
+    if (surface === "files") {
+      return api.loadFileRows(workspacePath, "", "", 1000);
+    }
+
+    if (surface === "apis") {
+      return api.loadApiRows(workspacePath, "", 1000);
+    }
+
+    if (surface === "backend") {
+      return api.loadBackendRows(workspacePath, "", "", 1000);
+    }
+
+    return api.loadAzureRows(workspacePath, "", 1000);
+  }
+
   async function loadWorkspacePanels() {
     await loadSummary();
     await loadOverview();
@@ -228,6 +285,9 @@ export function useWorkspaceData() {
     if (panel === "runtime" && !runtimeMap && canQueryWorkspace) {
       void loadRuntimeMap();
     }
+    if (panel === "explorer" && repositoryExplorerRows[repositoryExplorerSurface].length === 0 && canQueryWorkspace) {
+      void loadRepositoryExplorerSurface(repositoryExplorerSurface);
+    }
     if (panel === "backend" && backendRows.length === 0 && canQueryWorkspace) {
       void loadBackendRows();
     }
@@ -257,11 +317,14 @@ export function useWorkspaceData() {
     apiRows,
     azureRows,
     fileRows,
+    repositoryExplorerSurface,
+    repositoryExplorerRows,
     azureFilter,
     fileLanguageFilter,
     fileFolderFilter,
     chainLimit,
     activePanel,
+    theme,
     busy,
     message,
     canQueryWorkspace,
@@ -275,6 +338,8 @@ export function useWorkspaceData() {
     setFileLanguageFilter,
     setFileFolderFilter,
     setChainLimit,
+    setTheme,
+    setRepositoryExplorerSurface,
     checkHealth,
     initializeWorkspace,
     syncWorkspace,
@@ -286,6 +351,8 @@ export function useWorkspaceData() {
     loadApiRows,
     loadAzureRows,
     loadFileRows,
+    loadRepositoryExplorerSurface,
+    loadRepositoryExplorerAll,
     openOverviewItem,
     browseOverviewSection,
     openPanel

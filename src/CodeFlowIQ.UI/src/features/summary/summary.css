@@ -5,8 +5,8 @@
 }
 
 .list-panel {
-  background: #ffffff;
-  border: 1px solid #d7e0e8;
+  background: var(--surface);
+  border: 1px solid var(--border);
   min-width: 0;
   padding: 16px;
 }
@@ -18,7 +18,7 @@
 
 .list-row {
   align-items: center;
-  border-top: 1px solid #edf1f5;
+  border-top: 1px solid var(--app-bg);
   display: flex;
   gap: 12px;
   justify-content: space-between;

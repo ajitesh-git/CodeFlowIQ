@@ -6,6 +6,7 @@ import { BackendPanel } from "./features/backend-graph";
 import { ChainsPanel } from "./features/flow-chains";
 import { FilesPanel } from "./features/files";
 import { OverviewPanel } from "./features/overview";
+import { RepositoryExplorerPanel } from "./features/repository-explorer";
 import { RuntimeMapPanel } from "./features/runtime-map";
 import { SummaryPanel } from "./features/summary";
 import { useWorkspaceData } from "./hooks/useWorkspaceData";
@@ -16,7 +17,12 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <Sidebar activePanel={workspace.activePanel} onOpenPanel={workspace.openPanel} />
+      <Sidebar
+        activePanel={workspace.activePanel}
+        theme={workspace.theme}
+        onOpenPanel={workspace.openPanel}
+        onThemeChange={workspace.setTheme}
+      />
 
       <main className="main-panel">
         <Topbar
@@ -55,6 +61,16 @@ export function App() {
               runtimeMap={workspace.runtimeMap}
               disabled={queryDisabled}
               onLoad={workspace.loadRuntimeMap}
+            />
+          )}
+          {workspace.activePanel === "explorer" && (
+            <RepositoryExplorerPanel
+              activeSurface={workspace.repositoryExplorerSurface}
+              rowsBySurface={workspace.repositoryExplorerRows}
+              disabled={queryDisabled}
+              onSurfaceChange={workspace.setRepositoryExplorerSurface}
+              onLoadSurface={workspace.loadRepositoryExplorerSurface}
+              onLoadAll={workspace.loadRepositoryExplorerAll}
             />
           )}
           {workspace.activePanel === "summary" && <SummaryPanel summary={workspace.summary} />}

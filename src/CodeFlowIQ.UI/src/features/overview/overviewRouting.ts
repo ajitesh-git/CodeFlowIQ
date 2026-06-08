@@ -1,6 +1,15 @@
 import type { OverviewSection, RepositoryOverviewItem } from "../../types";
 
-export type AppPanel = "overview" | "runtime" | "summary" | "chains" | "backend" | "apis" | "azure" | "files";
+export type AppPanel =
+  | "overview"
+  | "runtime"
+  | "explorer"
+  | "summary"
+  | "chains"
+  | "backend"
+  | "apis"
+  | "azure"
+  | "files";
 
 export type OverviewNavigation =
   | { panel: "files"; language: string; folder: string; take?: number }
