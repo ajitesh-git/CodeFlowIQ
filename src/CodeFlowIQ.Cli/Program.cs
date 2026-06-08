@@ -95,6 +95,14 @@ static async Task<int> RunAsync(string[] args, IServiceProvider provider, Cancel
             await RunFlowsAsync(provider.GetRequiredService<IWorkspaceQueryService>(), workspacePath, args, cancellationToken);
             return 0;
 
+        case "chains":
+            await RunChainsAsync(provider.GetRequiredService<IWorkspaceQueryService>(), workspacePath, args, cancellationToken);
+            return 0;
+
+        case "backend":
+            await RunBackendAsync(provider.GetRequiredService<IWorkspaceQueryService>(), workspacePath, args, cancellationToken);
+            return 0;
+
         default:
             Console.Error.WriteLine($"Unknown command: {args[0]}");
             WriteHelp();
@@ -251,6 +259,53 @@ static async Task RunFlowsAsync(IWorkspaceQueryService queryService, string work
     }
 }
 
+static async Task RunChainsAsync(IWorkspaceQueryService queryService, string workspacePath, string[] args, CancellationToken cancellationToken)
+{
+    var rows = await queryService.ListFlowChainsAsync(
+        workspacePath,
+        GetOption(args, "--api"),
+        GetOption(args, "--source"),
+        GetOption(args, "--target"),
+        GetOption(args, "--format"),
+        GetBoolOption(args, "--include-tests", false),
+        GetIntOption(args, "--depth", 8),
+        GetIntOption(args, "--take", 20),
+        cancellationToken);
+
+    foreach (var row in rows)
+    {
+        Console.WriteLine(row);
+    }
+}
+
+static async Task RunBackendAsync(IWorkspaceQueryService queryService, string workspacePath, string[] args, CancellationToken cancellationToken)
+{
+    var kind = GetOption(args, "--kind");
+    var take = GetIntOption(args, "--take", 50);
+    string[] relationshipKinds = string.IsNullOrWhiteSpace(kind)
+        ? ["depends_on", "implemented_by", "calls_method", "executes_procedure", "reads_table", "writes_table", "saves_changes"]
+        : [kind];
+
+    var rows = new List<string>();
+    foreach (var relationshipKind in relationshipKinds)
+    {
+        rows.AddRange(await queryService.SearchRelationshipsAsync(
+            workspacePath,
+            GetFirstPositionalArgument(args),
+            relationshipKind,
+            GetOption(args, "--source"),
+            GetOption(args, "--target"),
+            GetBoolOption(args, "--include-tests", false),
+            take,
+            cancellationToken));
+    }
+
+    foreach (var row in rows.Distinct(StringComparer.Ordinal).Take(take))
+    {
+        Console.WriteLine(row);
+    }
+}
+
 static string GetWorkspacePath(string[] args)
 {
     var pathOption = GetOption(args, "--path");
@@ -336,6 +391,8 @@ static void WriteHelp()
     Console.WriteLine("  codeflowiq azure [--service <text>] [--take <n>] [--include-tests true|false] [--path <workspace-path>]");
     Console.WriteLine("  codeflowiq summary [--take <n>] [--include-tests true|false] [--path <workspace-path>]");
     Console.WriteLine("  codeflowiq flows [--api <text>] [--source <text>] [--handler <text>] [--take <n>] [--include-tests true|false] [--path <workspace-path>]");
+    Console.WriteLine("  codeflowiq chains [--api <text>] [--source <text>] [--target <text>] [--format compact|tree|json] [--depth <n>] [--take <n>] [--include-tests true|false] [--path <workspace-path>]");
+    Console.WriteLine("  codeflowiq backend [search-text] [--kind <kind>] [--source <text>] [--target <text>] [--take <n>] [--include-tests true|false] [--path <workspace-path>]");
 }
 
 static void WriteSection(string title, IReadOnlyList<string> rows)

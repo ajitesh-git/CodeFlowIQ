@@ -288,7 +288,9 @@ public sealed class WorkspaceIndexingService(
         };
 
     private static string QualifyIdentifier(string relativePath, string identifier) =>
-        identifier.Contains(" ", StringComparison.Ordinal)
+        identifier.StartsWith("global::", StringComparison.Ordinal)
+            ? identifier["global::".Length..]
+            : identifier.Contains(" ", StringComparison.Ordinal)
             || identifier.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
             || identifier.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
             || identifier.StartsWith("/", StringComparison.Ordinal)

@@ -1,0 +1,289 @@
+.chain-list {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.chain-card {
+  background: #ffffff;
+  border: 1px solid #d7e0e8;
+}
+
+.chain-card summary {
+  align-items: center;
+  cursor: pointer;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 48px;
+  padding: 0 14px;
+}
+
+.chain-card summary span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chain-card summary strong {
+  color: #526174;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.chain-overview {
+  border-top: 1px solid #edf1f5;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto;
+  padding: 14px;
+}
+
+.chain-overview div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.chain-overview span {
+  color: #718094;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.chain-overview strong {
+  background: #f5f7fa;
+  border: 1px solid #d7e0e8;
+  color: #243246;
+  font-size: 13px;
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  padding: 7px 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stage-strip {
+  align-content: end;
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 180px;
+}
+
+.stage-chip {
+  align-items: center;
+  border: 1px solid transparent;
+  display: inline-flex;
+  min-height: 26px;
+  padding: 0 8px;
+  text-transform: none !important;
+}
+
+.stage-chip.frontend,
+.stage-marker.frontend {
+  background: #dbeafe;
+  color: #1e4e8c;
+}
+
+.stage-chip.api,
+.stage-marker.api {
+  background: #e0f2fe;
+  color: #075985;
+}
+
+.stage-chip.backend,
+.stage-marker.backend {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.stage-chip.database,
+.stage-marker.database {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.stage-chip.azure,
+.stage-marker.azure {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.stage-chip.unknown,
+.stage-marker.unknown {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.copy-chain {
+  align-self: end;
+  align-items: center;
+  display: inline-flex;
+  gap: 7px;
+  justify-content: center;
+  min-width: 96px;
+}
+
+.flow-story {
+  border-top: 1px solid #edf1f5;
+  display: grid;
+  gap: 0;
+  list-style: none;
+  margin: 0;
+  padding: 8px 14px 14px;
+}
+
+.story-step {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 42px minmax(0, 1fr);
+  min-height: 58px;
+  padding: 8px 0;
+  position: relative;
+}
+
+.story-step::after {
+  background: #d7e0e8;
+  bottom: -10px;
+  content: "";
+  left: 16px;
+  position: absolute;
+  top: 40px;
+  width: 2px;
+}
+
+.story-step:last-child::after {
+  display: none;
+}
+
+.story-step div {
+  background: #fbfcfd;
+  border: 1px solid #d7e0e8;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 9px 11px;
+}
+
+.story-step strong {
+  color: #172231;
+  font-size: 13px;
+  font-weight: 760;
+  overflow-wrap: anywhere;
+}
+
+.story-step div span {
+  color: #66758a;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.technical-trace {
+  border-top: 1px solid #edf1f5;
+}
+
+.technical-trace > summary {
+  align-items: center;
+  color: #526174;
+  cursor: pointer;
+  display: flex;
+  font-size: 12px;
+  font-weight: 700;
+  min-height: 38px;
+  padding: 0 14px;
+}
+
+.chain-steps {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 14px;
+}
+
+.chain-steps li {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 42px 150px minmax(0, 1fr);
+  margin-left: calc(var(--depth) * 16px);
+  min-height: 32px;
+}
+
+.stage-marker {
+  align-items: center;
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 800;
+  height: 28px;
+  justify-content: center;
+  width: 34px;
+}
+
+.edge-label {
+  background: #e6f4f1;
+  color: #17675a;
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  padding: 5px 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.edge-label.resolve {
+  background: #f3e8ff;
+  color: #6b21a8;
+}
+
+.edge-label.data {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.edge-label.api {
+  background: #e0f2fe;
+  color: #075985;
+}
+
+.edge-label.code {
+  background: #e6f4f1;
+  color: #17675a;
+}
+
+.chain-steps code {
+  background: #111923;
+  color: #d9f6f0;
+  display: block;
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 7px 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chain-step.frontend code {
+  border-left: 4px solid #60a5fa;
+}
+
+.chain-step.api code {
+  border-left: 4px solid #38bdf8;
+}
+
+.chain-step.backend code {
+  border-left: 4px solid #a78bfa;
+}
+
+.chain-step.database code {
+  border-left: 4px solid #4ade80;
+}
+
+.chain-step.azure code {
+  border-left: 4px solid #f59e0b;
+}

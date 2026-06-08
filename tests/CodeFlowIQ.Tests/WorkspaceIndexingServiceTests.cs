@@ -61,7 +61,7 @@ public sealed class WorkspaceIndexingServiceTests
 
         await service.InitializeAsync(workspacePath, CancellationToken.None);
         var query = new WorkspaceQueryService();
-        var files = await query.ListFilesAsync(workspacePath, null, 20, CancellationToken.None);
+        var files = await query.ListFilesAsync(workspacePath, null, null, 20, CancellationToken.None);
 
         Assert.Contains(files, x => x.Contains("KeepService.cs", StringComparison.Ordinal));
         Assert.DoesNotContain(files, x => x.Contains("Drop.skip.cs", StringComparison.Ordinal));
@@ -186,6 +186,324 @@ public sealed class WorkspaceIndexingServiceTests
         Assert.Contains(relationships, x => x.Contains("symbol:AppDbContext.cs::AppDbContext->maps_dbset->domain-model:AppDbContext.cs::User", StringComparison.Ordinal));
         Assert.Contains(relationships, x => x.Contains("domain-model:AppDbContext.cs::User->maps_to_table->database-table:AppDbContext.cs::Users", StringComparison.Ordinal));
         Assert.Contains(relationships, x => x.Contains("uses_azure_service->azure-service:Azure Service Bus", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task InitializeAsync_CreatesBackendInternalFlowRelationships()
+    {
+        var workspacePath = Path.Combine(Path.GetTempPath(), "codeflowiq-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workspacePath);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "AuthController.cs"),
+            """
+            using Microsoft.AspNetCore.Mvc;
+
+            [Route("api/auth")]
+            public sealed class AuthController : ControllerBase
+            {
+                private readonly IUserRegistrationService _registrationService;
+
+                public AuthController(IUserRegistrationService registrationService)
+                {
+                    _registrationService = registrationService;
+                }
+
+                [HttpPost("register")]
+                public IActionResult Register()
+                {
+                    _registrationService.RegisterAsync();
+                    return Ok();
+                }
+            }
+            """);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "UserRegistrationService.cs"),
+            """
+            public sealed class UserRegistrationService : IUserRegistrationService
+            {
+                private readonly IUserRepository _userRepository;
+
+                public UserRegistrationService(IUserRepository userRepository)
+                {
+                    _userRepository = userRepository;
+                }
+
+                public void RegisterAsync()
+                {
+                    _userRepository.CreateAsync();
+                }
+            }
+            """);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "UserRepository.cs"),
+            """
+            public sealed class UserRepository : IUserRepository
+            {
+                private readonly AppDbContext _dbContext;
+
+                public UserRepository(AppDbContext dbContext)
+                {
+                    _dbContext = dbContext;
+                }
+
+                public void CreateAsync()
+                {
+                    _dbContext.Users.Add(new User());
+                    _dbContext.SaveChanges();
+                }
+            }
+            """);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "AppDbContext.cs"),
+            """
+            using Microsoft.EntityFrameworkCore;
+
+            public sealed class AppDbContext : DbContext
+            {
+                public DbSet<User> Users { get; set; }
+            }
+            """);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "Program.cs"),
+            """
+            services.AddScoped<IUserRegistrationService, UserRegistrationService>();
+            services.AddScoped<IUserRepository, UserRepository>();
+            """);
+
+        var service = CreateService();
+
+        await service.InitializeAsync(workspacePath, CancellationToken.None);
+
+        await using var db = await WorkspaceDatabase.OpenMigratedAsync(workspacePath, CancellationToken.None);
+        var relationships = await db.CodeRelationships
+            .Select(x => $"{x.SourceKind}:{x.SourceIdentifier}->{x.RelationshipKind}->{x.TargetKind}:{x.TargetIdentifier}")
+            .ToListAsync();
+
+        Assert.Contains(relationships, x => x.Contains("symbol:AuthController.cs::AuthController->depends_on->service:IUserRegistrationService", StringComparison.Ordinal));
+        Assert.Contains(relationships, x => x.Contains("service:IUserRegistrationService->implemented_by->class:UserRegistrationService", StringComparison.Ordinal));
+        Assert.Contains(relationships, x => x.Contains("symbol:AuthController.cs::Register->calls_method->method:IUserRegistrationService.RegisterAsync", StringComparison.Ordinal));
+        Assert.Contains(relationships, x => x.Contains("symbol:UserRegistrationService.cs::RegisterAsync->calls_method->method:IUserRepository.CreateAsync", StringComparison.Ordinal));
+        Assert.Contains(relationships, x => x.Contains("symbol:UserRepository.cs::CreateAsync->writes_table->database-table:UserRepository.cs::Users", StringComparison.Ordinal));
+        Assert.Contains(relationships, x => x.Contains("symbol:UserRepository.cs::CreateAsync->saves_changes->db-context:AppDbContext", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task InitializeAsync_DoesNotTreatHttpHeadersAsDatabaseWrites()
+    {
+        var workspacePath = Path.Combine(Path.GetTempPath(), "codeflowiq-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workspacePath);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "CortexSystem.cs"),
+            """
+            using System.Net.Http;
+
+            public sealed class CortexSystem
+            {
+                private readonly HttpClient _httpClient;
+
+                public CortexSystem(HttpClient httpClient)
+                {
+                    _httpClient = httpClient;
+                }
+
+                public void Send()
+                {
+                    _httpClient.DefaultRequestHeaders.Add("x-request-id", "123");
+                }
+            }
+            """);
+
+        var service = CreateService();
+
+        await service.InitializeAsync(workspacePath, CancellationToken.None);
+
+        await using var db = await WorkspaceDatabase.OpenMigratedAsync(workspacePath, CancellationToken.None);
+        var relationships = await db.CodeRelationships
+            .Select(x => $"{x.SourceKind}:{x.SourceIdentifier}->{x.RelationshipKind}->{x.TargetKind}:{x.TargetIdentifier}")
+            .ToListAsync();
+
+        Assert.DoesNotContain(relationships, x => x.Contains("writes_table", StringComparison.Ordinal));
+        Assert.DoesNotContain(relationships, x => x.Contains("DefaultRequestHeaders", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task InitializeAsync_ConnectsCSharpRepositoryToStoredProcedureAndTables()
+    {
+        var workspacePath = Path.Combine(Path.GetTempPath(), "codeflowiq-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workspacePath);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "UserRepository.cs"),
+            """
+            public sealed class UserRepository
+            {
+                private readonly AppDbContext _dbContext;
+
+                public UserRepository(AppDbContext dbContext)
+                {
+                    _dbContext = dbContext;
+                }
+
+                public void Create()
+                {
+                    _dbContext.Database.ExecuteSqlRaw("EXEC dbo.RegisterUser @Name");
+                }
+            }
+            """);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "RegisterUser.sql"),
+            """
+            CREATE PROCEDURE dbo.RegisterUser
+            AS
+            BEGIN
+                INSERT INTO dbo.Users (Name) VALUES ('Ada');
+                SELECT Id, Name FROM dbo.Users;
+            END
+            """);
+
+        var service = CreateService();
+
+        await service.InitializeAsync(workspacePath, CancellationToken.None);
+
+        await using var db = await WorkspaceDatabase.OpenMigratedAsync(workspacePath, CancellationToken.None);
+        var relationships = await db.CodeRelationships
+            .Select(x => $"{x.SourceKind}:{x.SourceIdentifier}->{x.RelationshipKind}->{x.TargetKind}:{x.TargetIdentifier}")
+            .ToListAsync();
+
+        Assert.Contains(relationships, x => x.Contains("symbol:UserRepository.cs::Create->executes_procedure->procedure:dbo.RegisterUser", StringComparison.Ordinal));
+        Assert.Contains(relationships, x => x.Contains("procedure:dbo.RegisterUser->writes_table->database-table:dbo.Users", StringComparison.Ordinal));
+        Assert.Contains(relationships, x => x.Contains("procedure:dbo.RegisterUser->reads_table->database-table:dbo.Users", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task QueryService_StitchesFrontendToBackendProcedureAndTableChain()
+    {
+        var workspacePath = Path.Combine(Path.GetTempPath(), "codeflowiq-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workspacePath);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "register.component.ts"),
+            """
+            export class RegisterComponent {
+                register() {
+                    this.http.post('/api/register', {});
+                }
+            }
+            """);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "AuthController.cs"),
+            """
+            using Microsoft.AspNetCore.Mvc;
+
+            [Route("api")]
+            public sealed class AuthController : ControllerBase
+            {
+                private readonly IUserRegistrationService _registrationService;
+
+                public AuthController(IUserRegistrationService registrationService)
+                {
+                    _registrationService = registrationService;
+                }
+
+                [HttpPost("register")]
+                public IActionResult Register()
+                {
+                    _registrationService.RegisterAsync();
+                    return Ok();
+                }
+            }
+            """);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "UserRegistrationService.cs"),
+            """
+            public sealed class UserRegistrationService : IUserRegistrationService
+            {
+                private readonly IUserRepository _userRepository;
+
+                public UserRegistrationService(IUserRepository userRepository)
+                {
+                    _userRepository = userRepository;
+                }
+
+                public void RegisterAsync()
+                {
+                    _userRepository.CreateAsync();
+                }
+            }
+            """);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "UserRepository.cs"),
+            """
+            public sealed class UserRepository : IUserRepository
+            {
+                private readonly AppDbContext _dbContext;
+
+                public UserRepository(AppDbContext dbContext)
+                {
+                    _dbContext = dbContext;
+                }
+
+                public void CreateAsync()
+                {
+                    _dbContext.Database.ExecuteSqlRaw("EXEC dbo.RegisterUser @Name");
+                }
+            }
+            """);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "Program.cs"),
+            """
+            services.AddScoped<IUserRegistrationService, UserRegistrationService>();
+            services.AddScoped<IUserRepository, UserRepository>();
+            """);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "RegisterUser.sql"),
+            """
+            CREATE PROCEDURE dbo.RegisterUser
+            AS
+            BEGIN
+                INSERT INTO dbo.Users (Name) VALUES ('Ada');
+            END
+            """);
+
+        var service = CreateService();
+
+        await service.InitializeAsync(workspacePath, CancellationToken.None);
+
+        var query = new WorkspaceQueryService();
+        var chains = await query.ListFlowChainsAsync(workspacePath, "register", null, "dbo.Users", "compact", false, 8, 10, CancellationToken.None);
+
+        Assert.True(chains.Any(x => x.Contains("register.component.ts::register", StringComparison.Ordinal)
+            && x.Contains("AuthController.cs::Register", StringComparison.Ordinal)
+            && x.Contains("IUserRegistrationService.RegisterAsync", StringComparison.Ordinal)
+            && x.Contains("UserRegistrationService.cs::RegisterAsync", StringComparison.Ordinal)
+            && x.Contains("IUserRepository.CreateAsync", StringComparison.Ordinal)
+            && x.Contains("UserRepository.cs::CreateAsync", StringComparison.Ordinal)
+            && x.Contains("dbo.RegisterUser", StringComparison.Ordinal)
+            && x.Contains("dbo.Users", StringComparison.Ordinal)),
+            string.Join(Environment.NewLine, chains));
+
+        var treeChains = await query.ListFlowChainsAsync(workspacePath, "register", null, "dbo.Users", "tree", false, 8, 1, CancellationToken.None);
+        Assert.Single(treeChains);
+        Assert.Contains(Environment.NewLine, treeChains[0], StringComparison.Ordinal);
+        Assert.Contains("resolved_to -> symbol:UserRegistrationService.cs::RegisterAsync", treeChains[0], StringComparison.Ordinal);
+
+        var jsonChains = await query.ListFlowChainsAsync(workspacePath, "register", null, "dbo.Users", "json", false, 8, 1, CancellationToken.None);
+        Assert.Single(jsonChains);
+        Assert.Contains("\"nodes\"", jsonChains[0], StringComparison.Ordinal);
+        Assert.Contains("\"edges\"", jsonChains[0], StringComparison.Ordinal);
+        Assert.Contains("\"relationship\":\"writes_table\"", jsonChains[0], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -386,6 +704,80 @@ public sealed class WorkspaceIndexingServiceTests
         Assert.Contains(flows, x => x.Contains("accountSetup.api.js::saveAccountSetup", StringComparison.Ordinal)
             && x.Contains("AccountSetupController.cs::Save", StringComparison.Ordinal));
         Assert.DoesNotContain(flows, x => x.Contains("TrialBalanceController.cs::GetConsolidationTBSummary", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RuntimeMap_StitchesRouteUiServiceApiBackendAndNavigation()
+    {
+        var workspacePath = Path.Combine(Path.GetTempPath(), "codeflowiq-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workspacePath);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "app-routing.module.ts"),
+            """
+            const routes = [
+              { path: 'login', component: LoginComponent }
+            ];
+            """);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "login.component.html"),
+            """<form (ngSubmit)="submit()"></form>""");
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "login.component.ts"),
+            """
+            export class LoginComponent {
+                submit() {
+                    this.authService.login();
+                    this.router.navigate(['/home']);
+                }
+            }
+            """);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "auth.service.ts"),
+            """
+            export class AuthService {
+                login() {
+                    return this.http.post('/api/auth/login', {});
+                }
+            }
+            """);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "AuthController.cs"),
+            """
+            using Microsoft.AspNetCore.Mvc;
+
+            [Route("api/auth")]
+            public sealed class AuthController : ControllerBase
+            {
+                [HttpPost("login")]
+                public IActionResult Login() => Ok();
+            }
+            """);
+
+        var service = CreateService();
+
+        await service.InitializeAsync(workspacePath, CancellationToken.None);
+
+        var query = new WorkspaceQueryService();
+        var runtimeMap = await query.GetRuntimeFlowMapAsync(workspacePath, false, 10, CancellationToken.None);
+
+        Assert.NotNull(runtimeMap);
+        Assert.NotEmpty(runtimeMap!.ExecutionPaths);
+        var rendered = string.Join(
+            Environment.NewLine,
+            runtimeMap.ExecutionPaths.SelectMany(path => path.Flows).SelectMany(flow => flow.Steps.Select(step => $"{step.Stage}:{step.Title}:{step.Detail}")));
+
+        Assert.Contains("Route:/login", rendered, StringComparison.Ordinal);
+        Assert.Contains("UI event", rendered, StringComparison.Ordinal);
+        Assert.Contains("submit", rendered, StringComparison.Ordinal);
+        Assert.Contains("auth.service.ts::login", rendered, StringComparison.Ordinal);
+        Assert.Contains("POST /api/auth/login", rendered, StringComparison.Ordinal);
+        Assert.Contains("AuthController.cs::Login", rendered, StringComparison.Ordinal);
+        Assert.Contains("Navigation outcome:/home", rendered, StringComparison.Ordinal);
     }
 
     private sealed class PlainDirectoryGitDetector : IGitWorkspaceDetector

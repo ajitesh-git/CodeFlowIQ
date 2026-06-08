@@ -8,6 +8,10 @@ obj/
 TestResults/
 coverage/
 
+node_modules/
+dist/
+*.tsbuildinfo
+
 *.user
 *.suo
 *.rsuser

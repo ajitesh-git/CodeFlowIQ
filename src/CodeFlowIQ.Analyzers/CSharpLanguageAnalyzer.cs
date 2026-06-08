@@ -2,6 +2,7 @@ using CodeFlowIQ.Core.Analysis;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using System.Text.RegularExpressions;
 
 namespace CodeFlowIQ.Analyzers;
 
@@ -41,6 +42,7 @@ public sealed class CSharpLanguageAnalyzer : ILanguageAnalyzer
                     case ClassDeclarationSyntax type:
                         symbols.Add(CreateSymbol(tree, type.Identifier.Text, GetClassKind(filePath, type), GetContainer(type), type.Identifier));
                         AddClassRelationships(type, relationships);
+                        AddBackendFlowRelationships(type, relationships);
                         break;
                     case BaseTypeDeclarationSyntax type:
                         symbols.Add(CreateSymbol(tree, type.Identifier.Text, GetTypeKind(type), GetContainer(type), type.Identifier));
@@ -60,6 +62,7 @@ public sealed class CSharpLanguageAnalyzer : ILanguageAnalyzer
             }
 
             AddMinimalApiRelationships(root, relationships);
+            AddDependencyInjectionRelationships(root, relationships);
 
             return Task.FromResult(new CodeAnalysisResult(LanguageId, "parsed", symbols, relationships));
         }
@@ -156,6 +159,213 @@ public sealed class CSharpLanguageAnalyzer : ILanguageAnalyzer
                 "database-table",
                 property.Identifier.Text,
                 $"dbContext={className}"));
+        }
+    }
+
+    private static void AddBackendFlowRelationships(ClassDeclarationSyntax type, List<DiscoveredRelationship> relationships)
+    {
+        var className = type.Identifier.Text;
+        var memberTypes = GetMemberTypes(type);
+
+        foreach (var dependencyType in memberTypes.Values.Distinct(StringComparer.Ordinal))
+        {
+            relationships.Add(new DiscoveredRelationship(
+                "symbol",
+                className,
+                "depends_on",
+                "service",
+                ToGlobalIdentifier(dependencyType),
+                null));
+        }
+
+        foreach (var method in type.Members.OfType<MethodDeclarationSyntax>())
+        {
+            var methodName = method.Identifier.Text;
+
+            foreach (var invocation in method.DescendantNodes().OfType<InvocationExpressionSyntax>())
+            {
+                AddMethodCallRelationship(methodName, invocation, memberTypes, relationships);
+                AddEntityFrameworkRelationship(methodName, invocation, memberTypes, relationships);
+                AddSqlProcedureRelationship(methodName, invocation, relationships);
+            }
+        }
+    }
+
+    private static Dictionary<string, string> GetMemberTypes(ClassDeclarationSyntax type)
+    {
+        var memberTypes = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        foreach (var field in type.Members.OfType<FieldDeclarationSyntax>())
+        {
+            var fieldType = field.Declaration.Type.ToString();
+            foreach (var variable in field.Declaration.Variables)
+            {
+                memberTypes[variable.Identifier.Text] = fieldType;
+            }
+        }
+
+        foreach (var constructor in type.Members.OfType<ConstructorDeclarationSyntax>())
+        {
+            foreach (var parameter in constructor.ParameterList.Parameters)
+            {
+                if (parameter.Type is not null)
+                {
+                    memberTypes[parameter.Identifier.Text] = parameter.Type.ToString();
+                }
+            }
+
+            foreach (var assignment in constructor.DescendantNodes().OfType<AssignmentExpressionSyntax>())
+            {
+                var leftName = GetIdentifierName(assignment.Left);
+                var rightName = GetIdentifierName(assignment.Right);
+                if (leftName is null || rightName is null || !memberTypes.TryGetValue(rightName, out var parameterType))
+                {
+                    continue;
+                }
+
+                memberTypes[leftName] = parameterType;
+            }
+        }
+
+        return memberTypes;
+    }
+
+    private static void AddMethodCallRelationship(
+        string sourceMethodName,
+        InvocationExpressionSyntax invocation,
+        IReadOnlyDictionary<string, string> memberTypes,
+        List<DiscoveredRelationship> relationships)
+    {
+        if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess)
+        {
+            return;
+        }
+
+        var receiverName = GetIdentifierName(memberAccess.Expression);
+        if (receiverName is null || !memberTypes.TryGetValue(receiverName, out var receiverType))
+        {
+            return;
+        }
+
+        var targetMethodName = memberAccess.Name.Identifier.Text;
+        if (IsEntityFrameworkMethod(targetMethodName))
+        {
+            return;
+        }
+
+        relationships.Add(new DiscoveredRelationship(
+            "symbol",
+            sourceMethodName,
+            "calls_method",
+            "method",
+            ToGlobalIdentifier($"{receiverType}.{targetMethodName}"),
+            $"receiver={receiverName}"));
+    }
+
+    private static void AddEntityFrameworkRelationship(
+        string sourceMethodName,
+        InvocationExpressionSyntax invocation,
+        IReadOnlyDictionary<string, string> memberTypes,
+        List<DiscoveredRelationship> relationships)
+    {
+        if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess)
+        {
+            return;
+        }
+
+        var invokedMethodName = memberAccess.Name.Identifier.Text;
+        var receiverExpression = memberAccess.Expression;
+
+        if (invokedMethodName is "SaveChanges" or "SaveChangesAsync")
+        {
+            var receiverName = GetIdentifierName(receiverExpression);
+            var target = receiverName is not null && memberTypes.TryGetValue(receiverName, out var contextType)
+                ? contextType
+                : receiverName ?? "DbContext";
+
+            relationships.Add(new DiscoveredRelationship(
+                "symbol",
+                sourceMethodName,
+                "saves_changes",
+                "db-context",
+                ToGlobalIdentifier(target),
+                receiverName is null ? null : $"receiver={receiverName}"));
+            return;
+        }
+
+        if (receiverExpression is not MemberAccessExpressionSyntax dbSetAccess)
+        {
+            return;
+        }
+
+        var contextName = GetIdentifierName(dbSetAccess.Expression);
+        if (contextName is null || !memberTypes.ContainsKey(contextName))
+        {
+            return;
+        }
+
+        if (!IsLikelyDbContextType(memberTypes[contextName]))
+        {
+            return;
+        }
+
+        var tableName = dbSetAccess.Name.Identifier.Text;
+        var relationshipKind = invokedMethodName switch
+        {
+            "Add" or "AddAsync" or "AddRange" or "AddRangeAsync" or "Update" or "UpdateRange" or "Remove" or "RemoveRange" => "writes_table",
+            "Find" or "FindAsync" or "Where" or "First" or "FirstAsync" or "FirstOrDefault" or "FirstOrDefaultAsync" or "Single" or "SingleAsync" or "SingleOrDefault" or "SingleOrDefaultAsync" or "ToList" or "ToListAsync" => "reads_table",
+            _ => null
+        };
+
+        if (relationshipKind is null)
+        {
+            return;
+        }
+
+        relationships.Add(new DiscoveredRelationship(
+            "symbol",
+            sourceMethodName,
+            relationshipKind,
+            "database-table",
+            tableName,
+            $"context={contextName};method={invokedMethodName}"));
+    }
+
+    private static void AddSqlProcedureRelationship(
+        string sourceMethodName,
+        InvocationExpressionSyntax invocation,
+        List<DiscoveredRelationship> relationships)
+    {
+        var invokedMethodName = invocation.Expression switch
+        {
+            MemberAccessExpressionSyntax memberAccess => memberAccess.Name.Identifier.Text,
+            IdentifierNameSyntax identifier => identifier.Identifier.Text,
+            _ => string.Empty
+        };
+
+        if (!LooksLikeSqlExecutionMethod(invokedMethodName)
+            && !InvocationMentionsStoredProcedureCommandType(invocation))
+        {
+            return;
+        }
+
+        foreach (var literal in invocation.ArgumentList.Arguments
+            .SelectMany(x => x.Expression.DescendantNodesAndSelf())
+            .OfType<LiteralExpressionSyntax>()
+            .Where(x => x.IsKind(SyntaxKind.StringLiteralExpression))
+            .Select(x => x.Token.ValueText)
+            .Where(x => !string.IsNullOrWhiteSpace(x)))
+        {
+            foreach (var procedureName in ExtractProcedureNames(literal))
+            {
+                relationships.Add(new DiscoveredRelationship(
+                    "symbol",
+                    sourceMethodName,
+                    "executes_procedure",
+                    "procedure",
+                    ToGlobalIdentifier(procedureName),
+                    $"method={invokedMethodName}"));
+            }
         }
     }
 
@@ -292,6 +502,39 @@ public sealed class CSharpLanguageAnalyzer : ILanguageAnalyzer
         }
     }
 
+    private static void AddDependencyInjectionRelationships(CompilationUnitSyntax root, List<DiscoveredRelationship> relationships)
+    {
+        foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        {
+            if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess)
+            {
+                continue;
+            }
+
+            var methodName = memberAccess.Name.Identifier.Text;
+            if (methodName is not ("AddScoped" or "AddTransient" or "AddSingleton"))
+            {
+                continue;
+            }
+
+            if (memberAccess.Name is not GenericNameSyntax genericName || genericName.TypeArgumentList.Arguments.Count < 2)
+            {
+                continue;
+            }
+
+            var serviceType = genericName.TypeArgumentList.Arguments[0].ToString();
+            var implementationType = genericName.TypeArgumentList.Arguments[1].ToString();
+
+            relationships.Add(new DiscoveredRelationship(
+                "service",
+                ToGlobalIdentifier(serviceType),
+                "implemented_by",
+                "class",
+                ToGlobalIdentifier(implementationType),
+                $"lifetime={methodName}"));
+        }
+    }
+
     private static IReadOnlyList<(string HttpMethod, string? RouteTemplate)> GetHttpEndpoints(SyntaxList<AttributeListSyntax> attributeLists)
     {
         var endpoints = new List<(string HttpMethod, string? RouteTemplate)>();
@@ -395,6 +638,79 @@ public sealed class CSharpLanguageAnalyzer : ILanguageAnalyzer
         entityName = string.Empty;
         return false;
     }
+
+    private static string? GetIdentifierName(ExpressionSyntax expression) =>
+        expression switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.Text,
+            MemberAccessExpressionSyntax memberAccess when memberAccess.Expression is ThisExpressionSyntax => memberAccess.Name.Identifier.Text,
+            MemberAccessExpressionSyntax memberAccess => memberAccess.Name.Identifier.Text,
+            _ => null
+        };
+
+    private static bool IsEntityFrameworkMethod(string methodName) =>
+        methodName is "Add" or "AddAsync" or "AddRange" or "AddRangeAsync"
+            or "Update" or "UpdateRange"
+            or "Remove" or "RemoveRange"
+            or "Find" or "FindAsync"
+            or "Where"
+            or "First" or "FirstAsync" or "FirstOrDefault" or "FirstOrDefaultAsync"
+            or "Single" or "SingleAsync" or "SingleOrDefault" or "SingleOrDefaultAsync"
+            or "ToList" or "ToListAsync"
+            or "SaveChanges" or "SaveChangesAsync";
+
+    private static bool IsLikelyDbContextType(string typeName) =>
+        typeName.Equals("DbContext", StringComparison.Ordinal)
+        || typeName.EndsWith("DbContext", StringComparison.Ordinal)
+        || typeName.EndsWith("DbContext?", StringComparison.Ordinal)
+        || typeName.Contains(".DbContext", StringComparison.Ordinal)
+        || typeName.EndsWith("Context", StringComparison.Ordinal)
+        || typeName.EndsWith("Context?", StringComparison.Ordinal);
+
+    private static bool LooksLikeSqlExecutionMethod(string methodName) =>
+        methodName.Contains("Sql", StringComparison.OrdinalIgnoreCase)
+        || methodName.Contains("Query", StringComparison.OrdinalIgnoreCase)
+        || methodName.Contains("Execute", StringComparison.OrdinalIgnoreCase)
+        || methodName.Contains("Procedure", StringComparison.OrdinalIgnoreCase)
+        || methodName is "FromSqlRaw" or "FromSqlInterpolated";
+
+    private static bool InvocationMentionsStoredProcedureCommandType(InvocationExpressionSyntax invocation) =>
+        invocation.ArgumentList.Arguments
+            .SelectMany(x => x.Expression.DescendantNodesAndSelf())
+            .OfType<MemberAccessExpressionSyntax>()
+            .Any(x => x.ToString().EndsWith("CommandType.StoredProcedure", StringComparison.Ordinal));
+
+    private static IEnumerable<string> ExtractProcedureNames(string sqlText)
+    {
+        var normalized = sqlText.Trim();
+        foreach (Match match in Regex.Matches(
+            normalized,
+            @"\b(?:EXEC(?:UTE)?|CALL)\s+(?:\[?(?<schema>[A-Za-z_][\w$]*)\]?\.)?\[?(?<name>[A-Za-z_][\w$]*)\]?",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+        {
+            var name = match.Groups["name"].Value;
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                continue;
+            }
+
+            var schema = match.Groups["schema"].Success ? match.Groups["schema"].Value : null;
+            yield return string.IsNullOrWhiteSpace(schema) ? name : $"{schema}.{name}";
+        }
+
+        if (Regex.IsMatch(normalized, @"^[\[\]\w$]+(\.[\[\]\w$]+)?$", RegexOptions.CultureInvariant)
+            && !normalized.Contains(' ', StringComparison.Ordinal)
+            && (normalized.Contains('.', StringComparison.Ordinal)
+                || normalized.EndsWith("Procedure", StringComparison.OrdinalIgnoreCase)
+                || normalized.EndsWith("Proc", StringComparison.OrdinalIgnoreCase)
+                || normalized.StartsWith("sp", StringComparison.OrdinalIgnoreCase)))
+        {
+            yield return normalized.Replace("[", string.Empty, StringComparison.Ordinal)
+                .Replace("]", string.Empty, StringComparison.Ordinal);
+        }
+    }
+
+    private static string ToGlobalIdentifier(string identifier) => "global::" + identifier;
 
     private static string CombineRoutes(string? controllerRoute, string? actionRoute, string controllerName, string actionName)
     {

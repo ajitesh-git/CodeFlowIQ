@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/CodeFlowIQ.Analyzers/CodeFlowIQ.Analyzers.csproj" />
+    <Project Path="src/CodeFlowIQ.Api/CodeFlowIQ.Api.csproj" />
     <Project Path="src/CodeFlowIQ.Cli/CodeFlowIQ.Cli.csproj" />
     <Project Path="src/CodeFlowIQ.Core/CodeFlowIQ.Core.csproj" />
     <Project Path="src/CodeFlowIQ.Data/CodeFlowIQ.Data.csproj" />

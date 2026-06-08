@@ -21,6 +21,22 @@ public sealed class JavaScriptTypeScriptLanguageAnalyzer : ILanguageAnalyzer
         @"\bon(Click|Submit|Change|Blur|Focus)\s*=\s*\{\s*([A-Za-z_$][\w$]*)\s*\}",
         RegexOptions.Compiled);
 
+    private static readonly Regex MethodCallPattern = new(
+        @"\b(?:this\.)?([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)\s*\(",
+        RegexOptions.Compiled);
+
+    private static readonly Regex AngularRoutePattern = new(
+        @"path\s*:\s*['""]([^'""]*)['""][^{}\r\n]*component\s*:\s*([A-Za-z_$][\w$]*)",
+        RegexOptions.Compiled);
+
+    private static readonly Regex ReactRoutePattern = new(
+        @"<Route\b[^>]*\bpath\s*=\s*[""']([^""']+)[""'][^>]*(?:\belement\s*=\s*\{\s*<([A-Za-z_$][\w$]*)|\bcomponent\s*=\s*\{\s*([A-Za-z_$][\w$]*))",
+        RegexOptions.Compiled);
+
+    private static readonly Regex NavigatePattern = new(
+        @"(?:router|history|navigate|navigation)\.(?:navigate|navigateByUrl|push|replace)\s*\(\s*(?:\[\s*)?([^,\]\)]+)|\bnavigate\s*\(\s*([^,\)]+)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private static readonly Regex ConstAssignmentPattern = new(
         @"^\s*const\s+([A-Za-z_$][\w$]*)\s*=\s*(.+?);?\s*$",
         RegexOptions.Compiled);
@@ -128,6 +144,45 @@ public sealed class JavaScriptTypeScriptLanguageAnalyzer : ILanguageAnalyzer
                     $"line={lineNumber}"));
             }
 
+            foreach (Match routeMatch in AngularRoutePattern.Matches(line))
+            {
+                var route = NormalizeClientRoute(routeMatch.Groups[1].Value);
+                relationships.Add(new DiscoveredRelationship(
+                    "route",
+                    route,
+                    "renders_component",
+                    "component",
+                    $"global::{routeMatch.Groups[2].Value}",
+                    $"line={lineNumber};framework=angular"));
+            }
+
+            foreach (Match routeMatch in ReactRoutePattern.Matches(line))
+            {
+                var componentName = routeMatch.Groups[2].Success ? routeMatch.Groups[2].Value : routeMatch.Groups[3].Value;
+                relationships.Add(new DiscoveredRelationship(
+                    "route",
+                    NormalizeClientRoute(routeMatch.Groups[1].Value),
+                    "renders_component",
+                    "component",
+                    $"global::{componentName}",
+                    $"line={lineNumber};framework=react"));
+            }
+
+            foreach (Match navigateMatch in NavigatePattern.Matches(line))
+            {
+                var routeExpression = FirstSuccessfulGroup(navigateMatch, 1, 2);
+                if (TryResolveExpression(routeExpression, constants, out var route))
+                {
+                    relationships.Add(new DiscoveredRelationship(
+                        "symbol",
+                        currentSymbol ?? Path.GetFileName(filePath),
+                        "navigates_to",
+                        "route",
+                        NormalizeClientRoute(route),
+                        $"line={lineNumber}"));
+                }
+            }
+
             foreach (Match httpMatch in HttpCallPattern.Matches(line))
             {
                 var method = FirstSuccessfulGroup(httpMatch, 1, 4).ToUpperInvariant();
@@ -140,8 +195,26 @@ public sealed class JavaScriptTypeScriptLanguageAnalyzer : ILanguageAnalyzer
                         "calls_api",
                         "api",
                         $"{method} {route}",
-                        $"line={lineNumber}"));
+                    $"line={lineNumber}"));
                 }
+            }
+
+            foreach (Match callMatch in MethodCallPattern.Matches(line))
+            {
+                var receiver = callMatch.Groups[1].Value;
+                var member = callMatch.Groups[2].Value;
+                if (ShouldIgnoreMethodCall(receiver, member))
+                {
+                    continue;
+                }
+
+                relationships.Add(new DiscoveredRelationship(
+                    "symbol",
+                    currentSymbol ?? Path.GetFileName(filePath),
+                    "calls_method",
+                    "method",
+                    $"{receiver}.{member}",
+                    $"line={lineNumber}"));
             }
         }
 
@@ -180,6 +253,17 @@ public sealed class JavaScriptTypeScriptLanguageAnalyzer : ILanguageAnalyzer
 
     private static bool IsControlFlowKeyword(string value) =>
         value is "if" or "for" or "foreach" or "while" or "switch" or "catch";
+
+    private static bool ShouldIgnoreMethodCall(string receiver, string member) =>
+        receiver is "http" or "httpClient" or "client" or "axios" or "console" or "Math" or "JSON" or "Object" or "Array"
+        || member is "get" or "post" or "put" or "patch" or "delete" or "log" or "map" or "filter" or "reduce" or "subscribe"
+            or "navigate" or "navigateByUrl" or "push" or "replace";
+
+    private static string NormalizeClientRoute(string route)
+    {
+        var normalized = route.Trim().Trim('"', '\'', '`');
+        return normalized.StartsWith("/", StringComparison.Ordinal) ? normalized : $"/{normalized}";
+    }
 
     private static bool TryResolveExpression(string expression, IReadOnlyDictionary<string, string> constants, out string value)
     {
