@@ -1,4 +1,5 @@
 import type { OverviewSection, RepositoryOverviewItem } from "../../types";
+import type { RepositoryExplorerSurface } from "../repository-explorer";
 
 export type AppPanel =
   | "overview"
@@ -12,6 +13,7 @@ export type AppPanel =
   | "files";
 
 export type OverviewNavigation =
+  | { panel: "explorer"; surface: RepositoryExplorerSurface; query: string }
   | { panel: "files"; language: string; folder: string; take?: number }
   | { panel: "chains"; api: string; target: string; take?: number }
   | { panel: "apis"; route: string; take?: number }
@@ -20,66 +22,66 @@ export type OverviewNavigation =
 
 export function getOverviewItemNavigation(section: OverviewSection, item: RepositoryOverviewItem): OverviewNavigation {
   if (section === "technology") {
-    return { panel: "files", language: toLanguageId(item.title), folder: "" };
+    return { panel: "explorer", surface: "files", query: toLanguageId(item.title) };
   }
 
   if (section === "flow") {
-    return { panel: "chains", api: item.title, target: "" };
+    return { panel: "explorer", surface: "backend", query: item.title };
   }
 
   if (section === "api") {
-    return { panel: "apis", route: item.title };
+    return { panel: "explorer", surface: "apis", query: item.title };
   }
 
   if (section === "data") {
-    return { panel: "backend", target: item.title };
+    return { panel: "explorer", surface: "backend", query: item.title };
   }
 
   if (section === "azure") {
-    return { panel: "azure", service: item.title };
+    return { panel: "explorer", surface: "azure", query: item.title };
   }
 
   if (section === "folder") {
-    return { panel: "files", language: "", folder: item.title };
+    return { panel: "explorer", surface: "files", query: item.title };
   }
 
   if (item.title.includes("API")) {
-    return { panel: "apis", route: "" };
+    return { panel: "explorer", surface: "apis", query: "" };
   }
 
   if (item.title.includes("data")) {
-    return { panel: "backend", target: "" };
+    return { panel: "explorer", surface: "backend", query: "" };
   }
 
   if (item.title.includes("Azure")) {
-    return { panel: "azure", service: "" };
+    return { panel: "explorer", surface: "azure", query: "" };
   }
 
   if (item.title.includes("folder")) {
-    return { panel: "files", language: "", folder: "" };
+    return { panel: "explorer", surface: "files", query: "" };
   }
 
-  return { panel: "chains", api: "", target: "" };
+  return { panel: "explorer", surface: "backend", query: "" };
 }
 
 export function getOverviewSectionNavigation(section: OverviewSection): OverviewNavigation {
   if (section === "technology" || section === "folder") {
-    return { panel: "files", language: "", folder: "", take: 1000 };
+    return { panel: "explorer", surface: "files", query: "" };
   }
 
   if (section === "api") {
-    return { panel: "apis", route: "", take: 1000 };
+    return { panel: "explorer", surface: "apis", query: "" };
   }
 
   if (section === "data") {
-    return { panel: "backend", target: "", take: 1000 };
+    return { panel: "explorer", surface: "backend", query: "" };
   }
 
   if (section === "azure") {
-    return { panel: "azure", service: "", take: 1000 };
+    return { panel: "explorer", surface: "azure", query: "" };
   }
 
-  return { panel: "chains", api: "", target: "", take: 50 };
+  return { panel: "explorer", surface: "backend", query: "" };
 }
 
 function toLanguageId(title: string) {

@@ -1,5 +1,6 @@
 import { BookOpen, Compass, FolderTree, Network, Play, RefreshCw, Search } from "lucide-react";
 import { useEffect, useState } from "react";
+import type { RepositoryExplorerSurface } from "../repository-explorer";
 import type { RuntimeExecutionPath, RuntimeFlow, RuntimeFlowMap } from "../../types";
 import "./runtime-map.css";
 
@@ -11,9 +12,10 @@ type RuntimeMapPanelProps = {
   runtimeMap: RuntimeFlowMap | null;
   disabled: boolean;
   onLoad: () => void;
+  onOpenExplorer: (surface: RepositoryExplorerSurface, query?: string, selectedItemId?: string | null) => void;
 };
 
-export function RuntimeMapPanel({ runtimeMap, disabled, onLoad }: RuntimeMapPanelProps) {
+export function RuntimeMapPanel({ runtimeMap, disabled, onLoad, onOpenExplorer }: RuntimeMapPanelProps) {
   const [selectedPathIndex, setSelectedPathIndex] = useState(0);
   const [selectedFlowIndex, setSelectedFlowIndex] = useState(0);
   const [activeRuntimeView, setActiveRuntimeView] = useState<RuntimeMapView>("recommended");
@@ -94,6 +96,15 @@ export function RuntimeMapPanel({ runtimeMap, disabled, onLoad }: RuntimeMapPane
     setActiveRuntimeView(nextView);
   }
 
+  function openSelectedFlowInExplorer() {
+    if (selectedFlow === null) {
+      return;
+    }
+
+    const target = getExplorerTargetForRuntimeFlow(selectedFlow, selectedPath);
+    onOpenExplorer(target.surface, target.query, target.selectedItemId);
+  }
+
   return (
     <div className="runtime-layout">
       <section className="runtime-hero">
@@ -136,8 +147,8 @@ export function RuntimeMapPanel({ runtimeMap, disabled, onLoad }: RuntimeMapPane
               <h3>Recommended Runtime Stories</h3>
               <p>Curated connected paths first. Use All Start Points or All Flows when you need complete repository coverage.</p>
             </div>
-            <button onClick={() => setActiveRuntimeView("starts")}>
-              <Search size={16} /> Browse all
+            <button onClick={() => onOpenExplorer("files", "")}>
+              <FolderTree size={16} /> Browse all evidence
             </button>
           </div>
 
@@ -168,6 +179,7 @@ export function RuntimeMapPanel({ runtimeMap, disabled, onLoad }: RuntimeMapPane
                     selectedFlowIndex={selectedResolvedFlowIndex}
                     onSelectFlow={setSelectedFlowIndex}
                     onOpenEvidence={() => setActiveRuntimeView("evidence")}
+                    onOpenExplorer={onOpenExplorer}
                   />
                 )}
               </div>
@@ -252,9 +264,14 @@ export function RuntimeMapPanel({ runtimeMap, disabled, onLoad }: RuntimeMapPane
                 <p>Inspect one start point at a time, then open its source evidence when needed.</p>
               </div>
               {selectedFlow !== null && (
-                <button onClick={() => setActiveRuntimeView("evidence")}>
-                  <BookOpen size={16} /> Evidence
-                </button>
+                <div className="runtime-heading-actions">
+                  <button onClick={() => setActiveRuntimeView("evidence")}>
+                    <BookOpen size={16} /> Evidence
+                  </button>
+                  <button onClick={openSelectedFlowInExplorer}>
+                    <Search size={16} /> Drill down
+                  </button>
+                </div>
               )}
             </div>
             {selectedPath === null ? (
@@ -267,6 +284,7 @@ export function RuntimeMapPanel({ runtimeMap, disabled, onLoad }: RuntimeMapPane
                 selectedFlowIndex={selectedResolvedFlowIndex}
                 onSelectFlow={setSelectedFlowIndex}
                 onOpenEvidence={() => setActiveRuntimeView("evidence")}
+                onOpenExplorer={onOpenExplorer}
               />
             )}
           </div>
@@ -324,6 +342,12 @@ export function RuntimeMapPanel({ runtimeMap, disabled, onLoad }: RuntimeMapPane
                       <button onClick={() => selectRuntimeFlow(pathIndex, flowIndex, "evidence")}>
                         <BookOpen size={15} /> Evidence
                       </button>
+                      <button onClick={() => {
+                        const target = getExplorerTargetForRuntimeFlow(flow, path);
+                        onOpenExplorer(target.surface, target.query, target.selectedItemId);
+                      }}>
+                        <Search size={15} /> Drill down
+                      </button>
                     </div>
                   </div>
                 </article>
@@ -342,6 +366,9 @@ export function RuntimeMapPanel({ runtimeMap, disabled, onLoad }: RuntimeMapPane
             </div>
             <button onClick={() => setActiveRuntimeView("recommended")} disabled={selectedPath === null}>
               <Play size={16} /> Back to story
+            </button>
+            <button onClick={openSelectedFlowInExplorer} disabled={selectedFlow === null}>
+              <Search size={16} /> Open in Explorer
             </button>
           </div>
           <EvidenceDrawer key={`evidence-${selectedResolvedIndex}-${selectedResolvedFlowIndex}`} title={selectedFlow?.title ?? "Flow Evidence"} flows={selectedFlow ? [selectedFlow] : []} />
@@ -414,12 +441,13 @@ function RuntimeEntryButton({ active, index, path, onSelect }: { active: boolean
   );
 }
 
-function SelectedExecutionPath({ path, pathIndex, selectedFlowIndex, onSelectFlow, onOpenEvidence }: {
+function SelectedExecutionPath({ path, pathIndex, selectedFlowIndex, onSelectFlow, onOpenEvidence, onOpenExplorer }: {
   path: RuntimeExecutionPath;
   pathIndex: number;
   selectedFlowIndex: number;
   onSelectFlow: (index: number) => void;
   onOpenEvidence: () => void;
+  onOpenExplorer: (surface: RepositoryExplorerSurface, query?: string, selectedItemId?: string | null) => void;
 }) {
   const selectedResolvedFlowIndex = path.flows[selectedFlowIndex] ? selectedFlowIndex : 0;
   const selectedFlow = path.flows[selectedResolvedFlowIndex] ?? null;
@@ -472,6 +500,12 @@ function SelectedExecutionPath({ path, pathIndex, selectedFlowIndex, onSelectFlo
           <div className="runtime-story-actions">
             <button onClick={onOpenEvidence}>
               <BookOpen size={16} /> Open evidence
+            </button>
+            <button onClick={() => {
+              const target = getExplorerTargetForRuntimeFlow(selectedFlow, path);
+              onOpenExplorer(target.surface, target.query, target.selectedItemId);
+            }}>
+              <Search size={16} /> Drill down
             </button>
           </div>
           <RuntimeFlowDetail key={`flow-${pathIndex}-${selectedResolvedFlowIndex}`} flow={selectedFlow} />
@@ -650,6 +684,67 @@ function runtimeFlowTouchesLayer(flow: RuntimeFlow, terms: string[]) {
     const searchable = `${step.stage} ${step.kind} ${step.title} ${step.detail}`.toLowerCase();
     return terms.some((term) => searchable.includes(term));
   });
+}
+
+function getExplorerTargetForRuntimeFlow(flow: RuntimeFlow, path: RuntimeExecutionPath | null): {
+  surface: RepositoryExplorerSurface;
+  query: string;
+  selectedItemId: string | null;
+} {
+  const metadataStep = [...flow.steps].reverse().find((step) => step.explorerSurface && (step.repositoryExplorerItemId || step.explorerQuery));
+  if (metadataStep?.explorerSurface && (metadataStep.explorerQuery || metadataStep.repositoryExplorerItemId)) {
+    return {
+      surface: metadataStep.explorerSurface,
+      query: metadataStep.explorerQuery ?? getRuntimeExplorerQuery(metadataStep, flow, path),
+      selectedItemId: metadataStep.repositoryExplorerItemId ?? null
+    };
+  }
+
+  const targetStep = [...flow.steps].reverse().find((step) => {
+    const searchable = `${step.stage} ${step.kind} ${step.title} ${step.detail}`.toLowerCase();
+    return searchable.includes("azure")
+      || searchable.includes("cloud")
+      || searchable.includes("api")
+      || searchable.includes("http")
+      || searchable.includes("database")
+      || searchable.includes("procedure")
+      || searchable.includes("table")
+      || searchable.includes("sql");
+  }) ?? flow.steps[flow.steps.length - 1];
+  const searchable = targetStep ? `${targetStep.stage} ${targetStep.kind} ${targetStep.title} ${targetStep.detail}`.toLowerCase() : "";
+  const surface: RepositoryExplorerSurface = searchable.includes("azure") || searchable.includes("cloud")
+    ? "azure"
+    : "backend";
+
+  return {
+    surface,
+    query: getRuntimeExplorerQuery(targetStep, flow, path),
+    selectedItemId: targetStep?.repositoryExplorerItemId ?? null
+  };
+}
+
+function getRuntimeExplorerQuery(step: RuntimeFlow["steps"][number] | undefined, flow: RuntimeFlow, path: RuntimeExecutionPath | null) {
+  const candidates = [
+    step?.detail,
+    step?.title,
+    flow.title,
+    path?.entryPointDetail,
+    path?.entryPointTitle
+  ];
+
+  return candidates
+    .map((value) => sanitizeRuntimeExplorerQuery(value ?? ""))
+    .find((value) => value.length > 0) ?? "";
+}
+
+function sanitizeRuntimeExplorerQuery(value: string) {
+  const normalized = value
+    .replace(/^(method|class|route|api|table|procedure|file|symbol):/i, "")
+    .replace(/\.(cs|ts|tsx|jsx|sql|json)$/i, "")
+    .trim();
+  const qualifiedIndex = normalized.lastIndexOf("::");
+  const member = qualifiedIndex >= 0 ? normalized.slice(qualifiedIndex + 2) : normalized;
+  return member.split(/[\\/]/).filter(Boolean).pop() ?? member;
 }
 
 function buildRuntimeCoverageSummary(startPoints: number, connected: number, partial: number, detectedOnly: number, dataFlows: number, flowCount: number) {

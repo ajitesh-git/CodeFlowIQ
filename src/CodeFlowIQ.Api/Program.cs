@@ -31,6 +31,10 @@ builder.Services.AddSingleton<ILanguageAnalyzer, SqlLanguageAnalyzer>();
 builder.Services.AddSingleton<ILanguageAnalyzer, JavaScriptTypeScriptLanguageAnalyzer>();
 builder.Services.AddSingleton<ILanguageAnalyzer, AngularTemplateLanguageAnalyzer>();
 builder.Services.AddSingleton<IWorkspaceIndexingService, WorkspaceIndexingService>();
+builder.Services.AddSingleton<WorkspaceInventoryQueryHandler>();
+builder.Services.AddSingleton<FlowChainQueryHandler>();
+builder.Services.AddSingleton<RepositoryOverviewQueryHandler>();
+builder.Services.AddSingleton<RuntimeFlowQueryHandler>();
 builder.Services.AddSingleton<IWorkspaceQueryService, WorkspaceQueryService>();
 
 var app = builder.Build();
@@ -61,6 +65,7 @@ app.MapGet("/", () => Results.Ok(new
         "/api/relationships",
         "/api/apis",
         "/api/azure",
+        "/api/explorer",
         "/api/flows",
         "/api/chains",
         "/api/backend"
@@ -193,6 +198,17 @@ api.MapGet("/azure", async (
     IWorkspaceQueryService queryService,
     CancellationToken cancellationToken) =>
     Results.Ok(await queryService.ListAzureServicesAsync(path, service, includeTests == true, NormalizeTake(take, 50), cancellationToken)));
+
+api.MapGet("/explorer", async (
+    string path,
+    string surface,
+    string? q,
+    string? selectedItemId,
+    bool? includeTests,
+    int? take,
+    IWorkspaceQueryService queryService,
+    CancellationToken cancellationToken) =>
+    Results.Ok(await queryService.ListRepositoryExplorerItemsAsync(path, surface, q, selectedItemId, includeTests == true, NormalizeTake(take, 200), cancellationToken)));
 
 api.MapGet("/flows", async (
     string path,

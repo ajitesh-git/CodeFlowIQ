@@ -1,14 +1,17 @@
 import { Braces, Cloud, Database, FolderTree, Layers3, RefreshCw, Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { EmptyState } from "../../components/common/EmptyState";
+import type { RepositoryExplorerItem } from "../../types";
 import "./repository-explorer.css";
 
 export type RepositoryExplorerSurface = "files" | "apis" | "backend" | "azure";
 
-export type RepositoryExplorerRows = Record<RepositoryExplorerSurface, string[]>;
+export type RepositoryExplorerRows = Record<RepositoryExplorerSurface, RepositoryExplorerItem[]>;
 
 type RepositoryExplorerPanelProps = {
   activeSurface: RepositoryExplorerSurface;
+  incomingQuery: string;
+  incomingSelectedItemId?: string | null;
   rowsBySurface: RepositoryExplorerRows;
   disabled: boolean;
   onSurfaceChange: (surface: RepositoryExplorerSurface) => void;
@@ -55,6 +58,8 @@ const surfaces: Array<{
 
 export function RepositoryExplorerPanel({
   activeSurface,
+  incomingQuery,
+  incomingSelectedItemId,
   rowsBySurface,
   disabled,
   onSurfaceChange,
@@ -62,9 +67,26 @@ export function RepositoryExplorerPanel({
   onLoadAll
 }: RepositoryExplorerPanelProps) {
   const [query, setQuery] = useState("");
-  const [selectedRow, setSelectedRow] = useState<string | null>(null);
+  const [selectedRow, setSelectedRow] = useState<RepositoryExplorerItem | null>(null);
+  const rowRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const rows = rowsBySurface[activeSurface];
   const activeConfig = surfaces.find((surface) => surface.id === activeSurface) ?? surfaces[0];
+
+  useEffect(() => {
+    setQuery(incomingQuery);
+    setSelectedRow(null);
+  }, [activeSurface, incomingQuery, incomingSelectedItemId]);
+
+  useEffect(() => {
+    if (!incomingSelectedItemId) {
+      return;
+    }
+
+    const exactRow = rows.find((row) => row.id === incomingSelectedItemId);
+    if (exactRow) {
+      setSelectedRow(exactRow);
+    }
+  }, [incomingSelectedItemId, rows]);
 
   const filteredRows = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -72,11 +94,27 @@ export function RepositoryExplorerPanel({
       return rows;
     }
 
-    return rows.filter((row) => row.toLowerCase().includes(normalized));
+    return rows.filter((row) => getSearchableText(row).includes(normalized));
   }, [query, rows]);
 
-  const groupedRows = useMemo(() => groupRows(filteredRows, activeSurface), [activeSurface, filteredRows]);
-  const selectedDetail = selectedRow && filteredRows.includes(selectedRow) ? selectedRow : filteredRows[0] ?? null;
+  const hasFocusedEmptyState = rows.length > 0 && filteredRows.length === 0 && query.trim().length > 0;
+  const exactSelectedRow = incomingSelectedItemId ? rows.find((row) => row.id === incomingSelectedItemId) ?? null : null;
+  const exactSelectionMissesFilter =
+    exactSelectedRow !== null && !filteredRows.some((row) => row.id === exactSelectedRow.id);
+  const visibleRows =
+    (hasFocusedEmptyState && incomingQuery.trim().length > 0) || exactSelectionMissesFilter ? rows : filteredRows;
+  const groupedRows = useMemo(() => groupRows(visibleRows, activeSurface), [activeSurface, visibleRows]);
+  const selectedDetail =
+    selectedRow && visibleRows.some((row) => row.id === selectedRow.id) ? selectedRow : visibleRows[0] ?? null;
+  const populatedSurfaces = surfaces.filter((surface) => surface.id !== activeSurface && rowsBySurface[surface.id].length > 0);
+
+  useEffect(() => {
+    if (!incomingSelectedItemId || selectedDetail?.id !== incomingSelectedItemId) {
+      return;
+    }
+
+    rowRefs.current[incomingSelectedItemId]?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [incomingSelectedItemId, selectedDetail]);
 
   function changeSurface(surface: RepositoryExplorerSurface) {
     onSurfaceChange(surface);
@@ -97,6 +135,12 @@ export function RepositoryExplorerPanel({
             Move from curated previews into searchable full lists, then inspect one record at a time without losing
             orientation.
           </p>
+          {incomingQuery.trim().length > 0 && (
+            <div className="repository-context-note">
+              Showing drill-down results for <strong>{incomingQuery}</strong>
+              {incomingSelectedItemId && <span>Exact evidence selected</span>}
+            </div>
+          )}
         </div>
         <div className="repository-explorer-actions">
           <button onClick={() => onLoadSurface()} disabled={disabled}>
@@ -140,13 +184,45 @@ export function RepositoryExplorerPanel({
               </span>
             </label>
             <p>
-              <strong>{filteredRows.length}</strong> shown of {rows.length} loaded
+              <strong>{visibleRows.length}</strong> shown of {rows.length} loaded
             </p>
           </div>
 
           <div className="repository-group-list">
-            {filteredRows.length === 0 ? (
-              <EmptyState label={rows.length === 0 ? activeConfig.emptyLabel : "No loaded records match this search"} />
+            {hasFocusedEmptyState && incomingQuery.trim().length > 0 && (
+              <div className="repository-filter-empty compact">
+                <strong>No focused matches for {incomingQuery}</strong>
+                <p>Showing all loaded {activeConfig.label.toLowerCase()} instead. The drill-down opened the right Explorer tab, but this Runtime Map label does not appear verbatim in the indexed rows.</p>
+                <button onClick={() => setQuery("")} type="button">
+                  Clear focused search
+                </button>
+              </div>
+            )}
+            {exactSelectionMissesFilter && exactSelectedRow && (
+              <div className="repository-filter-empty compact">
+                <strong>Exact evidence selected</strong>
+                <p>The selected Runtime Map evidence row does not match the current text filter, so the full loaded {activeConfig.label.toLowerCase()} list is shown.</p>
+                <button onClick={() => setQuery("")} type="button">
+                  Clear focused search
+                </button>
+              </div>
+            )}
+            {visibleRows.length === 0 ? (
+              rows.length === 0 && populatedSurfaces.length > 0 ? (
+                <div className="repository-filter-empty">
+                  <strong>{activeConfig.emptyLabel}</strong>
+                  <p>This Explorer section has no indexed rows for the current workspace. Other sections do have data loaded.</p>
+                  <div className="repository-empty-actions">
+                    {populatedSurfaces.map((surface) => (
+                      <button key={surface.id} onClick={() => changeSurface(surface.id)} type="button">
+                        Open {surface.label} ({rowsBySurface[surface.id].length})
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <EmptyState label={rows.length === 0 ? activeConfig.emptyLabel : "No loaded records match this search"} />
+              )
             ) : (
               groupedRows.map((group) => (
                 <section className="repository-group" key={group.label}>
@@ -154,15 +230,19 @@ export function RepositoryExplorerPanel({
                     {group.label}
                     <span>{group.rows.length}</span>
                   </h3>
-                  {group.rows.map((row, index) => (
+                  {group.rows.map((row) => (
                     <button
-                      className={selectedDetail === row ? "active" : ""}
-                      key={`${row}-${index}`}
+                      className={selectedDetail?.id === row.id ? "active" : ""}
+                      data-explorer-item-id={row.id}
+                      key={row.id}
                       onClick={() => setSelectedRow(row)}
+                      ref={(element) => {
+                        rowRefs.current[row.id] = element;
+                      }}
                       type="button"
                     >
-                      <span>{getPrimaryText(row, activeSurface)}</span>
-                      <small>{getSecondaryText(row, activeSurface)}</small>
+                      <span>{row.title}</span>
+                      <small>{row.subtitle}</small>
                     </button>
                   ))}
                 </section>
@@ -175,7 +255,7 @@ export function RepositoryExplorerPanel({
           {selectedDetail ? (
             <>
               <span className="eyebrow">Selected Evidence</span>
-              <h3>{getPrimaryText(selectedDetail, activeSurface)}</h3>
+              <h3>{selectedDetail.title}</h3>
               <dl>
                 <div>
                   <dt>Section</dt>
@@ -185,8 +265,31 @@ export function RepositoryExplorerPanel({
                   <dt>Group</dt>
                   <dd>{getGroupLabel(selectedDetail, activeSurface)}</dd>
                 </div>
+                {selectedDetail.relationshipKind && (
+                  <div>
+                    <dt>Relationship</dt>
+                    <dd>{selectedDetail.relationshipKind}</dd>
+                  </div>
+                )}
+                {selectedDetail.filePath && (
+                  <div>
+                    <dt>File</dt>
+                    <dd>{selectedDetail.filePath}</dd>
+                  </div>
+                )}
+                {selectedDetail.lineNumber && (
+                  <div>
+                    <dt>Line</dt>
+                    <dd>{selectedDetail.lineNumber}</dd>
+                  </div>
+                )}
               </dl>
-              <pre>{selectedDetail}</pre>
+              <pre>{selectedDetail.detail}</pre>
+              <div className="repository-detail-fields">
+                <code>{selectedDetail.sourceKind}:{selectedDetail.sourceIdentifier}</code>
+                {selectedDetail.targetIdentifier && <code>{selectedDetail.targetKind}:{selectedDetail.targetIdentifier}</code>}
+                {selectedDetail.metadata && <code>{selectedDetail.metadata}</code>}
+              </div>
             </>
           ) : (
             <EmptyState label="Select a loaded record to inspect details" />
@@ -197,8 +300,8 @@ export function RepositoryExplorerPanel({
   );
 }
 
-function groupRows(rows: string[], surface: RepositoryExplorerSurface) {
-  const groups = new Map<string, string[]>();
+function groupRows(rows: RepositoryExplorerItem[], surface: RepositoryExplorerSurface) {
+  const groups = new Map<string, RepositoryExplorerItem[]>();
   rows.forEach((row) => {
     const label = getGroupLabel(row, surface);
     groups.set(label, [...(groups.get(label) ?? []), row]);
@@ -207,74 +310,54 @@ function groupRows(rows: string[], surface: RepositoryExplorerSurface) {
   return Array.from(groups, ([label, groupRows]) => ({ label, rows: groupRows }));
 }
 
-function getGroupLabel(row: string, surface: RepositoryExplorerSurface) {
+function getGroupLabel(row: RepositoryExplorerItem, surface: RepositoryExplorerSurface) {
   if (surface === "files") {
-    const path = getFilePath(row);
+    const path = row.filePath ?? row.sourceIdentifier;
     const normalized = path.replaceAll("\\", "/");
     const firstFolder = normalized.split("/").filter(Boolean)[0];
     return firstFolder || "Root files";
   }
 
   if (surface === "backend") {
-    if (row.includes("reads_table")) {
+    if (row.relationshipKind === "reads_table") {
       return "Reads tables";
     }
-    if (row.includes("writes_table")) {
+    if (row.relationshipKind === "writes_table") {
       return "Writes tables";
     }
-    if (row.includes("executes_procedure")) {
+    if (row.relationshipKind === "executes_procedure") {
       return "Executes procedures";
     }
-    if (row.includes("calls_method")) {
+    if (row.relationshipKind === "calls_method") {
       return "Calls methods";
     }
     return "Backend relationships";
   }
 
   if (surface === "apis") {
-    const verb = row.match(/\b(GET|POST|PUT|PATCH|DELETE)\b/i)?.[0]?.toUpperCase();
+    const verb = row.title.match(/\b(GET|POST|PUT|PATCH|DELETE)\b/i)?.[0]?.toUpperCase();
     return verb ? `${verb} endpoints` : "API endpoints";
   }
 
-  const service = row.match(/\b(blob|queue|service bus|key vault|storage|sql|cosmos|function|app service)\b/i)?.[0];
+  const service = row.title.match(/\b(blob|queue|service bus|key vault|storage|sql|cosmos|function|app service)\b/i)?.[0];
   return service ? `${titleCase(service)} dependencies` : "Azure dependencies";
-}
-
-function getPrimaryText(row: string, surface: RepositoryExplorerSurface) {
-  if (surface === "files") {
-    return getFilePath(row);
-  }
-
-  const arrowParts = row.split(/\s*->\s*/);
-  if (arrowParts.length > 1) {
-    return arrowParts[0].trim();
-  }
-
-  return row.length > 110 ? `${row.slice(0, 110)}...` : row;
-}
-
-function getSecondaryText(row: string, surface: RepositoryExplorerSurface) {
-  if (surface === "files") {
-    return row.replace(getPrimaryText(row, surface), "").trim() || "Indexed file";
-  }
-
-  const arrowParts = row.split(/\s*->\s*/);
-  if (arrowParts.length > 1) {
-    return arrowParts.slice(1).join(" -> ").trim();
-  }
-
-  return getGroupLabel(row, surface);
 }
 
 function titleCase(value: string) {
   return value.replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function getFilePath(row: string) {
-  const parts = row
-    .split(/\t|\s{2,}|\s+\|\s+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-  const pathPart = parts.find((part) => part.includes("\\") || part.includes("/") || part.includes("."));
-  return pathPart ?? parts[parts.length - 1] ?? row;
+function getSearchableText(row: RepositoryExplorerItem) {
+  return [
+    row.title,
+    row.subtitle,
+    row.detail,
+    row.sourceKind,
+    row.sourceIdentifier,
+    row.relationshipKind,
+    row.targetKind,
+    row.targetIdentifier,
+    row.filePath,
+    row.metadata
+  ].filter(Boolean).join(" ").toLowerCase();
 }

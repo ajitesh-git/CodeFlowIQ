@@ -16,6 +16,10 @@ services.AddSingleton<ILanguageAnalyzer, SqlLanguageAnalyzer>();
 services.AddSingleton<ILanguageAnalyzer, JavaScriptTypeScriptLanguageAnalyzer>();
 services.AddSingleton<ILanguageAnalyzer, AngularTemplateLanguageAnalyzer>();
 services.AddSingleton<IWorkspaceIndexingService, WorkspaceIndexingService>();
+services.AddSingleton<WorkspaceInventoryQueryHandler>();
+services.AddSingleton<FlowChainQueryHandler>();
+services.AddSingleton<RepositoryOverviewQueryHandler>();
+services.AddSingleton<RuntimeFlowQueryHandler>();
 services.AddSingleton<IWorkspaceQueryService, WorkspaceQueryService>();
 
 await using var provider = services.BuildServiceProvider();

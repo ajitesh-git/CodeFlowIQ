@@ -61,11 +61,14 @@ export function App() {
               runtimeMap={workspace.runtimeMap}
               disabled={queryDisabled}
               onLoad={workspace.loadRuntimeMap}
+              onOpenExplorer={workspace.openRepositoryExplorer}
             />
           )}
           {workspace.activePanel === "explorer" && (
             <RepositoryExplorerPanel
               activeSurface={workspace.repositoryExplorerSurface}
+              incomingQuery={workspace.repositoryExplorerQuery}
+              incomingSelectedItemId={workspace.repositoryExplorerSelectedItemId}
               rowsBySurface={workspace.repositoryExplorerRows}
               disabled={queryDisabled}
               onSurfaceChange={workspace.setRepositoryExplorerSurface}

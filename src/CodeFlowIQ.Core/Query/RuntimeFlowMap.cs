@@ -12,7 +12,8 @@ public sealed record RuntimeEntryPoint(
     string Title,
     string Detail,
     string Category,
-    int Confidence);
+    int Confidence,
+    string? RepositoryExplorerItemId = null);
 
 public sealed record RuntimeFlow(
     string Title,
@@ -32,4 +33,8 @@ public sealed record RuntimeFlowStep(
     string Stage,
     string Title,
     string Detail,
-    string Kind);
+    string Kind,
+    string? EvidenceType = null,
+    string? ExplorerSurface = null,
+    string? ExplorerQuery = null,
+    string? RepositoryExplorerItemId = null);

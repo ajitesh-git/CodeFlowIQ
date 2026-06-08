@@ -49,6 +49,10 @@ export type RuntimeFlowStep = {
   title: string;
   detail: string;
   kind: string;
+  evidenceType?: string | null;
+  explorerSurface?: "files" | "apis" | "backend" | "azure" | null;
+  explorerQuery?: string | null;
+  repositoryExplorerItemId?: string | null;
 };
 
 export type RuntimeFlow = {
@@ -74,6 +78,22 @@ export type RuntimeFlowMap = {
   entryPoints: RuntimeEntryPoint[];
   executionPaths: RuntimeExecutionPath[];
   flows: RuntimeFlow[];
+};
+
+export type RepositoryExplorerItem = {
+  id: string;
+  surface: "files" | "apis" | "backend" | "azure";
+  title: string;
+  subtitle: string;
+  detail: string;
+  sourceKind: string;
+  sourceIdentifier: string;
+  relationshipKind?: string | null;
+  targetKind?: string | null;
+  targetIdentifier?: string | null;
+  filePath?: string | null;
+  lineNumber?: number | null;
+  metadata?: string | null;
 };
 
 export type OverviewSection = "guide" | "technology" | "flow" | "api" | "data" | "azure" | "folder";

@@ -41,6 +41,8 @@ export function useWorkspaceData() {
   const [azureRows, setAzureRows] = useState<string[]>([]);
   const [fileRows, setFileRows] = useState<string[]>([]);
   const [repositoryExplorerSurface, setRepositoryExplorerSurface] = useState<RepositoryExplorerSurface>("files");
+  const [repositoryExplorerQuery, setRepositoryExplorerQuery] = useState("");
+  const [repositoryExplorerSelectedItemId, setRepositoryExplorerSelectedItemId] = useState<string | null>(null);
   const [repositoryExplorerRows, setRepositoryExplorerRows] =
     useState<RepositoryExplorerRows>(emptyRepositoryExplorerRows);
   const [azureFilter, setAzureFilter] = useState("");
@@ -177,8 +179,8 @@ export function useWorkspaceData() {
     }
   }
 
-  async function loadRepositoryExplorerSurface(surface = repositoryExplorerSurface) {
-    const result = await runTask(`Loading ${surface} explorer`, () => loadRepositoryExplorerRows(surface));
+  async function loadRepositoryExplorerSurface(surface = repositoryExplorerSurface, selectedItemId = repositoryExplorerSelectedItemId) {
+    const result = await runTask(`Loading ${surface} explorer`, () => loadRepositoryExplorerRows(surface, selectedItemId));
     if (result) {
       setRepositoryExplorerRows((current) => ({ ...current, [surface]: result }));
     }
@@ -200,20 +202,29 @@ export function useWorkspaceData() {
     }
   }
 
-  function loadRepositoryExplorerRows(surface: RepositoryExplorerSurface) {
-    if (surface === "files") {
-      return api.loadFileRows(workspacePath, "", "", 1000);
+  function openRepositoryExplorer(surface: RepositoryExplorerSurface, query = "", selectedItemId: string | null = null) {
+    if (!canQueryWorkspace) {
+      return;
     }
 
-    if (surface === "apis") {
-      return api.loadApiRows(workspacePath, "", 1000);
+    setRepositoryExplorerSurface(surface);
+    setRepositoryExplorerQuery(query);
+    setRepositoryExplorerSelectedItemId(selectedItemId);
+    setActivePanel("explorer");
+    if (repositoryExplorerRows[surface].length === 0
+      || (selectedItemId && !repositoryExplorerRows[surface].some((row) => row.id === selectedItemId))) {
+      void loadRepositoryExplorerSurface(surface, selectedItemId);
     }
+  }
 
-    if (surface === "backend") {
-      return api.loadBackendRows(workspacePath, "", "", 1000);
-    }
+  function changeRepositoryExplorerSurface(surface: RepositoryExplorerSurface) {
+    setRepositoryExplorerSurface(surface);
+    setRepositoryExplorerQuery("");
+    setRepositoryExplorerSelectedItemId(null);
+  }
 
-    return api.loadAzureRows(workspacePath, "", 1000);
+  function loadRepositoryExplorerRows(surface: RepositoryExplorerSurface, selectedItemId: string | null = null) {
+    return api.loadExplorerItems(workspacePath, surface, "", 1000, selectedItemId);
   }
 
   async function loadWorkspacePanels() {
@@ -239,6 +250,11 @@ export function useWorkspaceData() {
   }
 
   function applyOverviewNavigation(navigation: OverviewNavigation) {
+    if (navigation.panel === "explorer") {
+      openRepositoryExplorer(navigation.surface, navigation.query);
+      return;
+    }
+
     if (navigation.panel === "files") {
       setFileLanguageFilter(navigation.language);
       setFileFolderFilter(navigation.folder);
@@ -318,6 +334,8 @@ export function useWorkspaceData() {
     azureRows,
     fileRows,
     repositoryExplorerSurface,
+    repositoryExplorerQuery,
+    repositoryExplorerSelectedItemId,
     repositoryExplorerRows,
     azureFilter,
     fileLanguageFilter,
@@ -339,7 +357,7 @@ export function useWorkspaceData() {
     setFileFolderFilter,
     setChainLimit,
     setTheme,
-    setRepositoryExplorerSurface,
+    setRepositoryExplorerSurface: changeRepositoryExplorerSurface,
     checkHealth,
     initializeWorkspace,
     syncWorkspace,
@@ -353,6 +371,7 @@ export function useWorkspaceData() {
     loadFileRows,
     loadRepositoryExplorerSurface,
     loadRepositoryExplorerAll,
+    openRepositoryExplorer,
     openOverviewItem,
     browseOverviewSection,
     openPanel

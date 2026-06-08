@@ -1,4 +1,4 @@
-import type { ApiHealth, RepositoryOverview, RuntimeFlowMap, WorkspaceSummary } from "../types";
+import type { ApiHealth, RepositoryExplorerItem, RepositoryOverview, RuntimeFlowMap, WorkspaceSummary } from "../types";
 
 type WorkspaceApiClient = {
   checkHealth: () => Promise<ApiHealth>;
@@ -12,6 +12,7 @@ type WorkspaceApiClient = {
   loadApiRows: (workspacePath: string, route: string, take: number) => Promise<string[]>;
   loadAzureRows: (workspacePath: string, service: string, take: number) => Promise<string[]>;
   loadFileRows: (workspacePath: string, language: string, folder: string, take: number) => Promise<string[]>;
+  loadExplorerItems: (workspacePath: string, surface: string, query: string, take: number, selectedItemId?: string | null) => Promise<RepositoryExplorerItem[]>;
 };
 
 export function createWorkspaceApi(baseUrl: string): WorkspaceApiClient {
@@ -50,7 +51,9 @@ export function createWorkspaceApi(baseUrl: string): WorkspaceApiClient {
     loadAzureRows: (workspacePath, service, take) =>
       request<string[]>(`/api/azure?path=${encode(workspacePath)}&service=${encode(service)}&take=${take}`),
     loadFileRows: (workspacePath, language, folder, take) =>
-      request<string[]>(`/api/files?path=${encode(workspacePath)}&language=${encode(language)}&folder=${encode(folder)}&take=${take}`)
+      request<string[]>(`/api/files?path=${encode(workspacePath)}&language=${encode(language)}&folder=${encode(folder)}&take=${take}`),
+    loadExplorerItems: (workspacePath, surface, query, take, selectedItemId) =>
+      request<RepositoryExplorerItem[]>(`/api/explorer?path=${encode(workspacePath)}&surface=${encode(surface)}&q=${encode(query)}&selectedItemId=${encode(selectedItemId ?? "")}&take=${take}`)
   };
 }
 
