@@ -68,6 +68,19 @@ public interface IWorkspaceQueryService
         int take,
         CancellationToken cancellationToken);
 
+    Task<CSharpBackendTrace?> GetCSharpBackendTraceAsync(
+        string workspacePath,
+        string entry,
+        bool includeTests,
+        int maxDepth,
+        CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<string>> ListCSharpBackendTraceEntriesAsync(
+        string workspacePath,
+        bool includeTests,
+        int take,
+        CancellationToken cancellationToken);
+
     Task<WorkspaceSummary?> GetSummaryAsync(string workspacePath, bool includeTests, int take, CancellationToken cancellationToken);
     Task<RepositoryOverview?> GetRepositoryOverviewAsync(string workspacePath, bool includeTests, int take, CancellationToken cancellationToken);
     Task<RuntimeFlowMap?> GetRuntimeFlowMapAsync(string workspacePath, bool includeTests, int take, CancellationToken cancellationToken);

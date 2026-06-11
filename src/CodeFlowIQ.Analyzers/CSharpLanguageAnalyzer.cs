@@ -137,6 +137,23 @@ public sealed class CSharpLanguageAnalyzer : ILanguageAnalyzer
     {
         var className = type.Identifier.Text;
 
+        foreach (var baseType in type.BaseList?.Types ?? [])
+        {
+            var baseTypeName = baseType.Type.ToString();
+            if (string.IsNullOrWhiteSpace(baseTypeName))
+            {
+                continue;
+            }
+
+            relationships.Add(new DiscoveredRelationship(
+                "symbol",
+                className,
+                "inherits_from",
+                "class",
+                ToGlobalIdentifier(baseTypeName),
+                null));
+        }
+
         foreach (var property in type.Members.OfType<PropertyDeclarationSyntax>())
         {
             if (!TryGetDbSetEntityName(property.Type.ToString(), out var entityName))
@@ -167,6 +184,8 @@ public sealed class CSharpLanguageAnalyzer : ILanguageAnalyzer
         var className = type.Identifier.Text;
         var memberTypes = GetMemberTypes(type);
 
+        AddConstructorDependencyRelationships(type, relationships);
+
         foreach (var dependencyType in memberTypes.Values.Distinct(StringComparer.Ordinal))
         {
             relationships.Add(new DiscoveredRelationship(
@@ -185,8 +204,51 @@ public sealed class CSharpLanguageAnalyzer : ILanguageAnalyzer
             foreach (var invocation in method.DescendantNodes().OfType<InvocationExpressionSyntax>())
             {
                 AddMethodCallRelationship(methodName, invocation, memberTypes, relationships);
+                AddDirectMethodCallRelationship(methodName, invocation, relationships);
                 AddEntityFrameworkRelationship(methodName, invocation, memberTypes, relationships);
                 AddSqlProcedureRelationship(methodName, invocation, relationships);
+            }
+        }
+    }
+
+    private static void AddConstructorDependencyRelationships(ClassDeclarationSyntax type, List<DiscoveredRelationship> relationships)
+    {
+        var className = type.Identifier.Text;
+
+        foreach (var constructor in type.Members.OfType<ConstructorDeclarationSyntax>())
+        {
+            var parameters = constructor.ParameterList.Parameters
+                .Where(x => x.Type is not null)
+                .ToDictionary(x => x.Identifier.Text, x => x, StringComparer.Ordinal);
+
+            foreach (var parameter in parameters.Values)
+            {
+                var parameterType = parameter.Type?.ToString();
+                if (string.IsNullOrWhiteSpace(parameterType))
+                {
+                    continue;
+                }
+
+                var key = GetFromKeyedServicesKey(parameter);
+                if (key is null)
+                {
+                    continue;
+                }
+
+                var fieldName = constructor.DescendantNodes()
+                    .OfType<AssignmentExpressionSyntax>()
+                    .Select(x => new { Left = GetIdentifierName(x.Left), Right = GetIdentifierName(x.Right) })
+                    .Where(x => x.Right == parameter.Identifier.Text && !string.IsNullOrWhiteSpace(x.Left))
+                    .Select(x => x.Left)
+                    .FirstOrDefault();
+
+                relationships.Add(new DiscoveredRelationship(
+                    "symbol",
+                    className,
+                    "depends_on",
+                    "service",
+                    ToGlobalIdentifier(parameterType),
+                    $"parameter={parameter.Identifier.Text};field={fieldName};key={key};source=FromKeyedServices"));
             }
         }
     }
@@ -248,7 +310,11 @@ public sealed class CSharpLanguageAnalyzer : ILanguageAnalyzer
         }
 
         var targetMethodName = memberAccess.Name.Identifier.Text;
-        if (IsEntityFrameworkMethod(targetMethodName))
+        if (IsEntityFrameworkMethod(targetMethodName)
+            || LooksLikeSqlExecutionMethod(targetMethodName)
+            || targetMethodName is "GetShardConnection" or "GetReadonlyShardConnection"
+            || targetMethodName.StartsWith("Log", StringComparison.Ordinal)
+            || receiverType.StartsWith("ILogger", StringComparison.Ordinal))
         {
             return;
         }
@@ -260,6 +326,31 @@ public sealed class CSharpLanguageAnalyzer : ILanguageAnalyzer
             "method",
             ToGlobalIdentifier($"{receiverType}.{targetMethodName}"),
             $"receiver={receiverName}"));
+    }
+
+    private static void AddDirectMethodCallRelationship(
+        string sourceMethodName,
+        InvocationExpressionSyntax invocation,
+        List<DiscoveredRelationship> relationships)
+    {
+        if (invocation.Expression is not IdentifierNameSyntax identifier)
+        {
+            return;
+        }
+
+        var targetMethodName = identifier.Identifier.Text;
+        if (targetMethodName is "nameof" or "ConfigureAwait" or "Ok" or "BadRequest" or "StatusCode" or "GetType" or "ReferenceEquals")
+        {
+            return;
+        }
+
+        relationships.Add(new DiscoveredRelationship(
+            "symbol",
+            sourceMethodName,
+            "calls_method",
+            "method",
+            targetMethodName,
+            "receiver=this;direct=true"));
     }
 
     private static void AddEntityFrameworkRelationship(
@@ -349,12 +440,22 @@ public sealed class CSharpLanguageAnalyzer : ILanguageAnalyzer
             return;
         }
 
-        foreach (var literal in invocation.ArgumentList.Arguments
+        var sqlTexts = invocation.ArgumentList.Arguments
             .SelectMany(x => x.Expression.DescendantNodesAndSelf())
             .OfType<LiteralExpressionSyntax>()
             .Where(x => x.IsKind(SyntaxKind.StringLiteralExpression))
             .Select(x => x.Token.ValueText)
-            .Where(x => !string.IsNullOrWhiteSpace(x)))
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Concat(invocation.ArgumentList.Arguments
+                .Select(x => x.Expression)
+                .OfType<IdentifierNameSyntax>()
+                .Select(x => FindStringVariableValue(invocation, x.Identifier.Text))
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Cast<string>())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        foreach (var literal in sqlTexts)
         {
             foreach (var procedureName in ExtractProcedureNames(literal))
             {
@@ -366,7 +467,31 @@ public sealed class CSharpLanguageAnalyzer : ILanguageAnalyzer
                     ToGlobalIdentifier(procedureName),
                     $"method={invokedMethodName}"));
             }
+
+            foreach (var tableReference in ExtractTableReferences(literal))
+            {
+                relationships.Add(new DiscoveredRelationship(
+                    "symbol",
+                    sourceMethodName,
+                    tableReference.Operation,
+                    "database-table",
+                    ToGlobalIdentifier(tableReference.TableName),
+                    $"method={invokedMethodName}"));
+            }
         }
+    }
+
+    private static string? FindStringVariableValue(SyntaxNode node, string variableName)
+    {
+        var method = node.Ancestors().OfType<MethodDeclarationSyntax>().FirstOrDefault();
+        return method?.DescendantNodes()
+            .OfType<VariableDeclaratorSyntax>()
+            .Where(x => x.Identifier.Text == variableName)
+            .Select(x => x.Initializer?.Value)
+            .OfType<LiteralExpressionSyntax>()
+            .Where(x => x.IsKind(SyntaxKind.StringLiteralExpression))
+            .Select(x => x.Token.ValueText)
+            .FirstOrDefault();
     }
 
     private static void AddApiRelationships(MethodDeclarationSyntax method, List<DiscoveredRelationship> relationships)
@@ -379,10 +504,11 @@ public sealed class CSharpLanguageAnalyzer : ILanguageAnalyzer
 
         var controllerRoute = GetRouteTemplate(classDeclaration.AttributeLists, "Route");
         var controllerName = TrimControllerSuffix(classDeclaration.Identifier.Text);
+        var methodRoute = GetRouteTemplate(method.AttributeLists, "Route");
 
         foreach (var endpoint in GetHttpEndpoints(method.AttributeLists))
         {
-            var route = CombineRoutes(controllerRoute, endpoint.RouteTemplate, controllerName, method.Identifier.Text);
+            var route = CombineRoutes(controllerRoute, endpoint.RouteTemplate ?? methodRoute, controllerName, method.Identifier.Text);
             var api = $"{endpoint.HttpMethod} {route}";
 
             relationships.Add(new DiscoveredRelationship(
@@ -512,7 +638,8 @@ public sealed class CSharpLanguageAnalyzer : ILanguageAnalyzer
             }
 
             var methodName = memberAccess.Name.Identifier.Text;
-            if (methodName is not ("AddScoped" or "AddTransient" or "AddSingleton"))
+            if (methodName is not ("AddScoped" or "AddTransient" or "AddSingleton"
+                or "AddKeyedScoped" or "AddKeyedTransient" or "AddKeyedSingleton"))
             {
                 continue;
             }
@@ -524,6 +651,9 @@ public sealed class CSharpLanguageAnalyzer : ILanguageAnalyzer
 
             var serviceType = genericName.TypeArgumentList.Arguments[0].ToString();
             var implementationType = genericName.TypeArgumentList.Arguments[1].ToString();
+            var key = methodName.StartsWith("AddKeyed", StringComparison.Ordinal)
+                ? invocation.ArgumentList.Arguments.Select(x => TryGetKeyExpressionValue(x.Expression)).FirstOrDefault(x => x is not null)
+                : null;
 
             relationships.Add(new DiscoveredRelationship(
                 "service",
@@ -531,9 +661,29 @@ public sealed class CSharpLanguageAnalyzer : ILanguageAnalyzer
                 "implemented_by",
                 "class",
                 ToGlobalIdentifier(implementationType),
-                $"lifetime={methodName}"));
+                key is null ? $"lifetime={methodName}" : $"lifetime={methodName};key={key}"));
         }
     }
+
+    private static string? GetFromKeyedServicesKey(ParameterSyntax parameter) =>
+        parameter.AttributeLists
+            .SelectMany(x => x.Attributes)
+            .Where(x => AttributeNameMatches(x.Name.ToString(), "FromKeyedServices"))
+            .SelectMany(x => x.ArgumentList?.Arguments ?? [])
+            .Select(x => TryGetKeyExpressionValue(x.Expression))
+            .FirstOrDefault(x => !string.IsNullOrWhiteSpace(x));
+
+    private static string? TryGetKeyExpressionValue(ExpressionSyntax expression) =>
+        expression switch
+        {
+            LiteralExpressionSyntax literal => literal.Token.ValueText,
+            InvocationExpressionSyntax
+            {
+                Expression: IdentifierNameSyntax { Identifier.Text: "nameof" },
+                ArgumentList.Arguments.Count: 1
+            } invocation => invocation.ArgumentList.Arguments[0].Expression.ToString(),
+            _ => null
+        };
 
     private static IReadOnlyList<(string HttpMethod, string? RouteTemplate)> GetHttpEndpoints(SyntaxList<AttributeListSyntax> attributeLists)
     {
@@ -709,6 +859,29 @@ public sealed class CSharpLanguageAnalyzer : ILanguageAnalyzer
                 .Replace("]", string.Empty, StringComparison.Ordinal);
         }
     }
+
+    private static IEnumerable<(string Operation, string TableName)> ExtractTableReferences(string sqlText)
+    {
+        foreach (Match match in Regex.Matches(
+            sqlText,
+            @"\b(?:FROM|JOIN)\s+(?<name>(?:\[[A-Za-z_][\w$]*\]\.)?\[[A-Za-z_][\w$]*\]|(?:[A-Za-z_][\w$]*\.)?[A-Za-z_][\w$]*)",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+        {
+            yield return ("reads_table", NormalizeSqlIdentifier(match.Groups["name"].Value));
+        }
+
+        foreach (Match match in Regex.Matches(
+            sqlText,
+            @"\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+(?<name>(?:\[[A-Za-z_][\w$]*\]\.)?\[[A-Za-z_][\w$]*\]|(?:[A-Za-z_][\w$]*\.)?[A-Za-z_][\w$]*)",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+        {
+            yield return ("writes_table", NormalizeSqlIdentifier(match.Groups["name"].Value));
+        }
+    }
+
+    private static string NormalizeSqlIdentifier(string identifier) =>
+        identifier.Replace("[", string.Empty, StringComparison.Ordinal)
+            .Replace("]", string.Empty, StringComparison.Ordinal);
 
     private static string ToGlobalIdentifier(string identifier) => "global::" + identifier;
 

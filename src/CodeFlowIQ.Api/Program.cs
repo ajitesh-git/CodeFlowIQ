@@ -31,10 +31,12 @@ builder.Services.AddSingleton<ILanguageAnalyzer, SqlLanguageAnalyzer>();
 builder.Services.AddSingleton<ILanguageAnalyzer, JavaScriptTypeScriptLanguageAnalyzer>();
 builder.Services.AddSingleton<ILanguageAnalyzer, AngularTemplateLanguageAnalyzer>();
 builder.Services.AddSingleton<IWorkspaceIndexingService, WorkspaceIndexingService>();
+builder.Services.AddSingleton<IWorkspaceIndexingJobService, WorkspaceIndexingJobService>();
 builder.Services.AddSingleton<WorkspaceInventoryQueryHandler>();
 builder.Services.AddSingleton<FlowChainQueryHandler>();
 builder.Services.AddSingleton<RepositoryOverviewQueryHandler>();
 builder.Services.AddSingleton<RuntimeFlowQueryHandler>();
+builder.Services.AddSingleton<CSharpBackendTraceQueryHandler>();
 builder.Services.AddSingleton<IWorkspaceQueryService, WorkspaceQueryService>();
 
 var app = builder.Build();
@@ -55,6 +57,8 @@ app.MapGet("/", () => Results.Ok(new
         "/health",
         "/openapi/v1.json",
         "/api/workspace/status",
+        "/api/workspace/indexing-status",
+        "/api/workspace/indexing-cancel",
         "/api/workspace/init",
         "/api/workspace/sync",
         "/api/overview",
@@ -69,7 +73,9 @@ app.MapGet("/", () => Results.Ok(new
         "/api/explorer/related",
         "/api/flows",
         "/api/chains",
-        "/api/backend"
+        "/api/backend",
+        "/api/csharp-backend-trace",
+        "/api/csharp-backend-trace/entries"
     }
 }));
 
@@ -92,9 +98,31 @@ api.MapGet("/workspace/status", async (
     return status is null ? Results.NotFound(new { message = "Workspace has not been initialized yet." }) : Results.Ok(status);
 });
 
+api.MapGet("/workspace/indexing-status", (
+    string path,
+    IWorkspaceIndexingJobService indexingJobs) =>
+{
+    var status = indexingJobs.GetStatus(path);
+    return status is null ? Results.NotFound(new { message = "No indexing job has been started for this workspace." }) : Results.Ok(status);
+});
+
+api.MapPost("/workspace/indexing-cancel", (
+    WorkspacePathRequest request,
+    IWorkspaceIndexingJobService indexingJobs) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Path))
+    {
+        return Results.BadRequest(new { message = "Path is required." });
+    }
+
+    var status = indexingJobs.Cancel(request.Path);
+    return status is null ? Results.NotFound(new { message = "No indexing job has been started for this workspace." }) : Results.Ok(status);
+});
+
 api.MapPost("/workspace/init", async (
     WorkspacePathRequest request,
-    IWorkspaceIndexingService indexingService,
+    IWorkspaceIndexingJobService indexingJobs,
+    IWorkspaceQueryService queryService,
     CancellationToken cancellationToken) =>
 {
     if (string.IsNullOrWhiteSpace(request.Path))
@@ -102,22 +130,40 @@ api.MapPost("/workspace/init", async (
         return Results.BadRequest(new { message = "Path is required." });
     }
 
-    var summary = await indexingService.InitializeAsync(request.Path, cancellationToken);
-    return Results.Ok(summary);
+    var existingStatus = await queryService.GetStatusAsync(request.Path, cancellationToken);
+    if (existingStatus?.LastIndexedAt is not null)
+    {
+        var completedAt = DateTimeOffset.UtcNow;
+        return Results.Ok(new
+        {
+            workspaceId = 0,
+            workspaceName = existingStatus.Name,
+            filesScanned = 0,
+            filesIndexed = 0,
+            filesSkipped = 0,
+            symbolsIndexed = existingStatus.SymbolCount,
+            startedAt = completedAt,
+            completedAt,
+            reusedExistingIndex = true,
+            message = "Using the existing workspace index. Run sync when you want to refresh changed files."
+        });
+    }
+
+    var status = indexingJobs.StartInitialize(request.Path);
+    return Results.Json(status, statusCode: StatusCodes.Status202Accepted);
 });
 
 api.MapPost("/workspace/sync", async (
     WorkspacePathRequest request,
-    IWorkspaceIndexingService indexingService,
-    CancellationToken cancellationToken) =>
+    IWorkspaceIndexingJobService indexingJobs) =>
 {
     if (string.IsNullOrWhiteSpace(request.Path))
     {
         return Results.BadRequest(new { message = "Path is required." });
     }
 
-    var summary = await indexingService.SyncAsync(request.Path, cancellationToken);
-    return Results.Ok(summary);
+    var status = indexingJobs.StartSync(request.Path);
+    return Results.Json(status, statusCode: StatusCodes.Status202Accepted);
 });
 
 api.MapGet("/summary", async (
@@ -244,6 +290,31 @@ api.MapGet("/chains", async (
     IWorkspaceQueryService queryService,
     CancellationToken cancellationToken) =>
     Results.Ok(await queryService.ListFlowChainsAsync(path, api, source, target, format, includeTests == true, NormalizeTake(depth, 8), NormalizeTake(take, 20), cancellationToken)));
+
+api.MapGet("/csharp-backend-trace", async (
+    string path,
+    string entry,
+    bool? includeTests,
+    int? depth,
+    IWorkspaceQueryService queryService,
+    CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(entry))
+    {
+        return Results.BadRequest(new { message = "Entry route or method text is required." });
+    }
+
+    var trace = await queryService.GetCSharpBackendTraceAsync(path, entry, includeTests == true, NormalizeTake(depth, 24), cancellationToken);
+    return trace is null ? Results.NotFound(new { message = "Workspace has not been initialized yet." }) : Results.Ok(trace);
+});
+
+api.MapGet("/csharp-backend-trace/entries", async (
+    string path,
+    bool? includeTests,
+    int? take,
+    IWorkspaceQueryService queryService,
+    CancellationToken cancellationToken) =>
+    Results.Ok(await queryService.ListCSharpBackendTraceEntriesAsync(path, includeTests == true, NormalizeTake(take, 1000), cancellationToken)));
 
 api.MapGet("/backend", async (
     string path,

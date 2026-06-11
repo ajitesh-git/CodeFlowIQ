@@ -1,27 +1,29 @@
 import { CodeFlowLoading } from "./components/common/CodeFlowLoading";
-import { MetricBand, Sidebar, StatusLine, Topbar, WorkspaceBar } from "./components/layout";
+import { Sidebar, StatusLine, Topbar, WorkspaceBar } from "./components/layout";
 import { ApiSurfacePanel } from "./features/api-surface";
 import { AzurePanel } from "./features/azure";
 import { BackendPanel } from "./features/backend-graph";
 import { ChainsPanel } from "./features/flow-chains";
+import { CSharpTracePanel } from "./features/csharp-trace";
 import { FilesPanel } from "./features/files";
 import { OverviewPanel } from "./features/overview";
 import { RepositoryExplorerPanel } from "./features/repository-explorer";
 import { RuntimeMapPanel } from "./features/runtime-map";
+import { SettingsPanel } from "./features/settings";
 import { SummaryPanel } from "./features/summary";
 import { useWorkspaceData } from "./hooks/useWorkspaceData";
 
 export function App() {
   const workspace = useWorkspaceData();
-  const queryDisabled = !workspace.canQueryWorkspace || workspace.isBusy;
+  const blockingBusy = workspace.isBusy && !workspace.isIndexingActive;
+  const queryDisabled = !workspace.canQueryWorkspace || blockingBusy;
+  const workspaceActionsDisabled = !workspace.canQueryWorkspace || workspace.isBusy;
 
   return (
     <div className="app-shell">
       <Sidebar
         activePanel={workspace.activePanel}
-        theme={workspace.theme}
         onOpenPanel={workspace.openPanel}
-        onThemeChange={workspace.setTheme}
       />
 
       <main className="main-panel">
@@ -29,6 +31,7 @@ export function App() {
           apiBaseUrl={workspace.apiBaseUrl}
           apiSource={workspace.apiSource}
           health={workspace.health}
+          summary={workspace.summary}
           busy={workspace.busy}
           onApiBaseUrlChange={workspace.setApiBaseUrl}
           onApiSourceChange={workspace.setApiSource}
@@ -37,14 +40,15 @@ export function App() {
 
         <WorkspaceBar
           workspacePath={workspace.workspacePath}
-          disabled={queryDisabled}
+          disabled={workspaceActionsDisabled}
+          indexingStatus={workspace.indexingStatus}
           onWorkspacePathChange={workspace.setWorkspacePath}
           onInitialize={workspace.initializeWorkspace}
           onSync={workspace.syncWorkspace}
+          onCancelIndexing={workspace.cancelIndexing}
+          onRetryIndexing={workspace.retryIndexing}
           onLoad={workspace.loadWorkspacePanels}
         />
-
-        <MetricBand summary={workspace.summary} />
 
         <section className="content-surface">
           {workspace.activePanel === "overview" && (
@@ -100,6 +104,21 @@ export function App() {
               onOpenExplorer={(target) => workspace.openExplorerTarget(target, "End-to-end flows")}
             />
           )}
+          {workspace.activePanel === "csharpTrace" && (
+            <CSharpTracePanel
+              entry={workspace.csharpTraceEntry}
+              depth={workspace.csharpTraceDepth}
+              trace={workspace.csharpTrace}
+              routeCandidates={workspace.csharpTraceEntries}
+              preferences={workspace.csharpTracePreferences}
+              disabled={queryDisabled}
+              onEntryChange={workspace.setCSharpTraceEntry}
+              onDepthChange={workspace.setCSharpTraceDepth}
+              onTrace={workspace.loadCSharpTrace}
+              onLoadRoutes={() => workspace.loadCSharpTraceEntries()}
+              onOpenExplorer={(target) => workspace.openExplorerTarget(target, "C# backend trace")}
+            />
+          )}
           {workspace.activePanel === "backend" && (
             <BackendPanel
               rows={workspace.backendRows}
@@ -140,12 +159,20 @@ export function App() {
               onOpenExplorer={(target) => workspace.openExplorerTarget(target, "Files indexed")}
             />
           )}
+          {workspace.activePanel === "settings" && (
+            <SettingsPanel
+              theme={workspace.theme}
+              onThemeChange={workspace.setTheme}
+              tracePreferences={workspace.csharpTracePreferences}
+              onTracePreferencesChange={workspace.setCSharpTracePreferences}
+            />
+          )}
         </section>
 
         <StatusLine busy={workspace.busy} message={workspace.message} health={workspace.health} />
       </main>
 
-      {workspace.busy && <CodeFlowLoading label={workspace.busy} />}
+      {blockingBusy && workspace.busy && <CodeFlowLoading label={workspace.busy} />}
     </div>
   );
 }

@@ -69,6 +69,54 @@ public sealed class WorkspaceIndexingServiceTests
     }
 
     [Fact]
+    public async Task SyncAsync_ReindexesUnchangedFileWhenAnalyzerFingerprintIsStale()
+    {
+        var workspacePath = Path.Combine(Path.GetTempPath(), "codeflowiq-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workspacePath);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "CarryForward.cs"),
+            """
+            public sealed class CarryForwardTrialBalanceLevviaManager : CarryForwardLevviaBase
+            {
+                public void Run()
+                {
+                    FinancialCarryForwardInternalAsync();
+                }
+            }
+
+            public abstract class CarryForwardLevviaBase
+            {
+                protected void FinancialCarryForwardInternalAsync() { }
+            }
+            """);
+
+        var service = CreateService();
+        await service.InitializeAsync(workspacePath, CancellationToken.None);
+
+        await using (var db = await WorkspaceDatabase.OpenMigratedAsync(workspacePath, CancellationToken.None))
+        {
+            var indexedFile = await db.IndexedFiles.SingleAsync(x => x.RelativePath == "CarryForward.cs");
+            indexedFile.ContentHash = indexedFile.ContentHash.Replace("csharp-analysis-v2:", string.Empty, StringComparison.Ordinal);
+            await db.SaveChangesAsync();
+        }
+
+        var summary = await service.SyncAsync(workspacePath, CancellationToken.None);
+
+        await using var refreshedDb = await WorkspaceDatabase.OpenMigratedAsync(workspacePath, CancellationToken.None);
+        var refreshedFile = await refreshedDb.IndexedFiles.SingleAsync(x => x.RelativePath == "CarryForward.cs");
+        var relationships = await refreshedDb.CodeRelationships
+            .Where(x => x.WorkspaceId == refreshedFile.WorkspaceId)
+            .Select(x => $"{x.RelationshipKind}:{x.SourceIdentifier}->{x.TargetIdentifier}")
+            .ToListAsync();
+
+        Assert.Equal(1, summary.FilesIndexed);
+        Assert.StartsWith("csharp-analysis-v2:", refreshedFile.ContentHash, StringComparison.Ordinal);
+        Assert.Contains(relationships, x => x.Contains("inherits_from", StringComparison.Ordinal));
+        Assert.Contains(relationships, x => x.Contains("calls_method", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task InitializeAsync_CreatesRelationshipsForDiscoveredSymbols()
     {
         var workspacePath = Path.Combine(Path.GetTempPath(), "codeflowiq-tests", Guid.NewGuid().ToString("N"));
@@ -871,6 +919,253 @@ public sealed class WorkspaceIndexingServiceTests
         Assert.Contains("POST /api/auth/login", rendered, StringComparison.Ordinal);
         Assert.Contains("AuthController.cs::Login", rendered, StringComparison.Ordinal);
         Assert.Contains("Navigation outcome:/home", rendered, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CSharpBackendTrace_ResolvesKeyedDiBaseClassRepoAndSqlEvidence()
+    {
+        var workspacePath = Path.Combine(Path.GetTempPath(), "codeflowiq-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workspacePath);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "CarryForwardLevviaController.cs"),
+            """
+            using Microsoft.AspNetCore.Mvc;
+
+            [Route("v4/engagements/{engagementId:guid}/CarryForwardLevvia")]
+            public sealed class CarryForwardLevviaController : ControllerBase
+            {
+                private readonly ICarryForwardLevvia _carryForwardTrialBalanceLevvia;
+
+                public CarryForwardLevviaController(
+                    [FromKeyedServices(nameof(CarryForwardTrialBalanceLevviaManager))] ICarryForwardLevvia carryForwardTrialBalanceLevvia)
+                {
+                    _carryForwardTrialBalanceLevvia = carryForwardTrialBalanceLevvia;
+                }
+
+                [HttpPost]
+                [Route("FinancialTrialBalanceCarryForward")]
+                public async Task<IActionResult> FinancialTrialBalanceCarryForward(Guid engagementId, LevviaCFRequestDto levviaCFRequestDto)
+                {
+                    var requestedBy = Guid.NewGuid();
+                    var isSuccess = await _carryForwardTrialBalanceLevvia.FinancialCarryForwardAsync(engagementId, levviaCFRequestDto, requestedBy);
+                    return Ok();
+                }
+            }
+            """);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "CarryForwardTrialBalanceLevviaManager.cs"),
+            """
+            public sealed class CarryForwardTrialBalanceLevviaManager : CarryForwardLevviaBase
+            {
+                public CarryForwardTrialBalanceLevviaManager(ICarryForwardLevviaRepo carryForwardLevviaRepo, ILevviaSystem levviaSystem, IShardProvider shardProvider, ICortexMigrationDocumentProvider cortexMigrationDocumentProvider)
+                    : base(carryForwardLevviaRepo, levviaSystem, shardProvider, cortexMigrationDocumentProvider)
+                {
+                }
+
+                public override async Task<bool> FinancialCarryForwardAsync(Guid engagementId, LevviaCFRequestDto levviaCFRequestDto, Guid requestedBy)
+                {
+                    return await FinancialCarryForwardInternalAsync(engagementId, levviaCFRequestDto, requestedBy);
+                }
+
+                protected override async Task<bool> ProcessDataAsync()
+                {
+                    await carryForwardLevviaRepo.SaveFinancialTrialBalanceCarryForward(Guid.NewGuid(), new LevviaCFRequestDto());
+                    return true;
+                }
+            }
+            """);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "CarryForwardLevviaBase.cs"),
+            """
+            public abstract class CarryForwardLevviaBase : ICarryForwardLevvia
+            {
+                protected readonly ICarryForwardLevviaRepo carryForwardLevviaRepo;
+                protected readonly ILevviaSystem levviaSystem;
+                protected readonly IShardProvider shardProvider;
+                protected readonly ICortexMigrationDocumentProvider cortexMigrationDocumentProvider;
+
+                protected CarryForwardLevviaBase(ICarryForwardLevviaRepo carryForwardLevviaRepo, ILevviaSystem levviaSystem, IShardProvider shardProvider, ICortexMigrationDocumentProvider cortexMigrationDocumentProvider)
+                {
+                    this.carryForwardLevviaRepo = carryForwardLevviaRepo;
+                    this.levviaSystem = levviaSystem;
+                    this.shardProvider = shardProvider;
+                    this.cortexMigrationDocumentProvider = cortexMigrationDocumentProvider;
+                }
+
+                public abstract Task<bool> FinancialCarryForwardAsync(Guid engagementId, LevviaCFRequestDto levviaCFRequestDto, Guid requestedBy);
+                protected abstract Task<bool> ProcessDataAsync();
+
+                protected async Task<bool> FinancialCarryForwardInternalAsync(Guid engagementId, LevviaCFRequestDto levviaCFRequestDto, Guid requestedBy)
+                {
+                    await GetAndCreateManifest(engagementId, levviaCFRequestDto, requestedBy);
+                    await GetManifestFromLevvia(engagementId, levviaCFRequestDto, requestedBy);
+                    await UploadFileToBlobAsync();
+                    return await ProcessDataAsync();
+                }
+
+                private async Task GetAndCreateManifest(Guid engagementId, LevviaCFRequestDto levviaCFRequestDto, Guid requestedBy)
+                {
+                    var existingManifest = await carryForwardLevviaRepo.GetCFManifestAsync(levviaCFRequestDto.TransitionId, engagementId);
+                    if (existingManifest == null)
+                    {
+                        await carryForwardLevviaRepo.SaveCFManifestAsync(new CFManifest());
+                    }
+                }
+
+                private async Task GetManifestFromLevvia(Guid engagementId, LevviaCFRequestDto levviaCFRequestDto, Guid requestedBy)
+                {
+                    await shardProvider.GetAsync(engagementId);
+                    await levviaSystem.GetManifestFileFromLevvia(levviaCFRequestDto.TransitionId, GetType().Name);
+                }
+
+                private async Task UploadFileToBlobAsync()
+                {
+                    await cortexMigrationDocumentProvider.UploadTBFileToBlob();
+                }
+            }
+            """);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "CarryForwardLevviaRepo.cs"),
+            """
+            using System.Data;
+
+            public sealed class CarryForwardLevviaRepo : ICarryForwardLevviaRepo
+            {
+                private readonly ISqlDatabase database;
+
+                public CarryForwardLevviaRepo(ISqlDatabase database)
+                {
+                    this.database = database;
+                }
+
+                public async Task<CFManifest?> GetCFManifestAsync(Guid transitionId, Guid engagementId)
+                {
+                    var sqlCommand = "SELECT [Id] FROM [fin].[CFManifest] WHERE TransitionId = @TransitionId";
+                    return await database.Query<CFManifest>(sqlCommand);
+                }
+
+                public async Task SaveCFManifestAsync(CFManifest manifest)
+                {
+                    await database.Execute("[fin].[USP_SaveCFManifest]", commandType: CommandType.StoredProcedure);
+                }
+
+                public async Task SaveFinancialTrialBalanceCarryForward(Guid engagementId, LevviaCFRequestDto dto)
+                {
+                    await database.Execute("[fin].[USP_SaveTrialBalanceCarryForward]", commandType: CommandType.StoredProcedure);
+                }
+            }
+            """);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "Program.cs"),
+            """
+            services.AddKeyedTransient<ICarryForwardLevvia, CarryForwardTrialBalanceLevviaManager>(nameof(CarryForwardTrialBalanceLevviaManager));
+            services.AddSingleton<ICarryForwardLevviaRepo, CarryForwardLevviaRepo>();
+            """);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "Contracts.cs"),
+            """
+            using System.Data;
+
+            public interface ICarryForwardLevvia
+            {
+                Task<bool> FinancialCarryForwardAsync(Guid engagementId, LevviaCFRequestDto levviaCFRequestDto, Guid requestedBy);
+            }
+
+            public interface ICarryForwardLevviaRepo
+            {
+                Task<CFManifest?> GetCFManifestAsync(Guid transitionId, Guid engagementId);
+                Task SaveCFManifestAsync(CFManifest manifest);
+                Task SaveFinancialTrialBalanceCarryForward(Guid engagementId, LevviaCFRequestDto dto);
+            }
+
+            public interface ILevviaSystem
+            {
+                Task GetManifestFileFromLevvia(Guid transitionId, string processName);
+            }
+
+            public sealed class LevviaSystem : ILevviaSystem
+            {
+                public Task GetManifestFileFromLevvia(Guid transitionId, string processName) => Task.CompletedTask;
+            }
+
+            public interface IShardProvider
+            {
+                Task GetAsync(Guid engagementId);
+            }
+
+            public sealed class ShardProvider : IShardProvider
+            {
+                public Task GetAsync(Guid engagementId) => Task.CompletedTask;
+            }
+
+            public interface ICortexMigrationDocumentProvider
+            {
+                Task UploadTBFileToBlob();
+            }
+
+            public interface ISqlDatabase
+            {
+                Task<T?> Query<T>(string sql);
+                Task Execute(string sql, CommandType commandType);
+            }
+
+            public sealed class LevviaCFRequestDto
+            {
+                public Guid TransitionId { get; set; }
+            }
+
+            public sealed class CFManifest { }
+            """);
+
+        var service = CreateService();
+        await service.InitializeAsync(workspacePath, CancellationToken.None);
+
+        var query = new WorkspaceQueryService();
+        var trace = await query.GetCSharpBackendTraceAsync(
+            workspacePath,
+            "POST /v4/engagements/{engagementId}/CarryForwardLevvia/FinancialTrialBalanceCarryForward",
+            includeTests: false,
+            maxDepth: 40,
+            CancellationToken.None);
+
+        Assert.NotNull(trace);
+        var rendered = string.Join('\n', trace!.Steps.Select(x => $"{x.Stage}: {x.Title} | {x.Detail} | {x.Confidence} | {x.Reason}"));
+
+        Assert.Contains("Keyed DI handoff", rendered, StringComparison.Ordinal);
+        Assert.Contains("ICarryForwardLevvia resolves to CarryForwardTrialBalanceLevviaManager", rendered, StringComparison.Ordinal);
+        Assert.Contains("Base class call", rendered, StringComparison.Ordinal);
+        Assert.Contains("GetAndCreateManifest", rendered, StringComparison.Ordinal);
+        Assert.Contains("Reads fin.CFManifest", rendered, StringComparison.Ordinal);
+        Assert.Contains("USP_SaveCFManifest", rendered, StringComparison.Ordinal);
+        Assert.Contains("IShardProvider resolves to ShardProvider", rendered, StringComparison.Ordinal);
+        Assert.Contains("ILevviaSystem resolves to LevviaSystem", rendered, StringComparison.Ordinal);
+        Assert.Contains("GetManifestFileFromLevvia", rendered, StringComparison.Ordinal);
+        Assert.Contains("UploadTBFileToBlob", rendered, StringComparison.Ordinal);
+        Assert.Contains("Override call", rendered, StringComparison.Ordinal);
+        Assert.Contains("USP_SaveTrialBalanceCarryForward", rendered, StringComparison.Ordinal);
+        Assert.Contains(trace.Steps, x => x.Category == "handoff" && x.Title.Contains("ILevviaSystem resolves", StringComparison.Ordinal));
+        Assert.Contains(trace.Steps, x => x.Category == "data" && x.Title.Contains("USP_SaveCFManifest", StringComparison.Ordinal));
+        Assert.Contains(trace.Steps, x => x.SourceFilePath == "CarryForwardLevviaController.cs"
+            && x.SourceLineNumber is > 0
+            && x.SourcePreview?.Contains("FinancialTrialBalanceCarryForward", StringComparison.Ordinal) == true);
+
+        var shortTrace = await query.GetCSharpBackendTraceAsync(
+            workspacePath,
+            "POST /v4/engagements/{engagementId}/CarryForwardLevvia/FinancialTrialBalanceCarryForward",
+            includeTests: false,
+            maxDepth: 5,
+            CancellationToken.None);
+
+        Assert.NotNull(shortTrace);
+        Assert.True(shortTrace!.HasMore);
+        Assert.NotNull(shortTrace.ContinuationEntry);
+        Assert.Contains("Stopped after", shortTrace.StopReason, StringComparison.Ordinal);
     }
 
     private sealed class PlainDirectoryGitDetector : IGitWorkspaceDetector

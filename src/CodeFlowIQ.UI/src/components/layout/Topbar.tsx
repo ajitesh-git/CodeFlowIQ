@@ -1,11 +1,13 @@
 import { Loader2, Server, ShieldCheck } from "lucide-react";
 import { FormEvent } from "react";
-import type { ApiHealth } from "../../types";
+import type { ApiHealth, WorkspaceSummary } from "../../types";
+import { MetricBand } from "./MetricBand";
 
 type TopbarProps = {
   apiBaseUrl: string;
   apiSource: string;
   health: ApiHealth | null;
+  summary: WorkspaceSummary | null;
   busy: string | null;
   onApiBaseUrlChange: (value: string) => void;
   onApiSourceChange: (value: "saved") => void;
@@ -16,6 +18,7 @@ export function Topbar({
   apiBaseUrl,
   apiSource,
   health,
+  summary,
   busy,
   onApiBaseUrlChange,
   onApiSourceChange,
@@ -39,12 +42,13 @@ export function Topbar({
         <button type="submit" className="icon-button" title="Check API connection">
           {busy === "Checking API" ? <Loader2 className="spin" size={18} /> : <Server size={18} />}
         </button>
+        <div className={health?.status === "healthy" ? "status-pill ok" : "status-pill"}>
+          <ShieldCheck size={16} />
+          {health?.status === "healthy" ? "API connected" : "API offline"}
+        </div>
       </form>
 
-      <div className={health?.status === "healthy" ? "status-pill ok" : "status-pill"}>
-        <ShieldCheck size={16} />
-        {health?.status === "healthy" ? "API connected" : "API offline"}
-      </div>
+      <MetricBand summary={summary} />
     </section>
   );
 }

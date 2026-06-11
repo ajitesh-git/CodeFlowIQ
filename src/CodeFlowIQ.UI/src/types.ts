@@ -5,6 +5,24 @@ export type ApiHealth = {
   runtimeFile?: string | null;
 };
 
+export type IndexingJobStatus = {
+  jobId: string;
+  workspacePath: string;
+  operation: string;
+  state: "queued" | "running" | "cancelling" | "cancelled" | "completed" | "failed" | string;
+  stage: string;
+  filesScanned: number;
+  filesIndexed: number;
+  filesSkipped: number;
+  symbolsIndexed: number;
+  currentFile?: string | null;
+  message: string;
+  startedAt: string;
+  updatedAt: string;
+  completedAt?: string | null;
+  error?: string | null;
+};
+
 export type WorkspaceSummary = {
   name: string;
   kind: string;
@@ -104,6 +122,47 @@ export type RepositoryExplorerItem = {
 export type RepositoryExplorerRelatedGroup = {
   label: string;
   rows: RepositoryExplorerItem[];
+};
+
+export type CSharpBackendTraceStep = {
+  number: number;
+  stage: string;
+  title: string;
+  detail: string;
+  confidence: string;
+  reason: string;
+  evidenceItemId?: string | null;
+  sourceKind?: string | null;
+  sourceIdentifier?: string | null;
+  targetKind?: string | null;
+  targetIdentifier?: string | null;
+  metadata?: string | null;
+  category: string;
+  isFrameworkCall: boolean;
+  isBoundary: boolean;
+  isHiddenByDefault: boolean;
+  hiddenReason?: string | null;
+  sourceFilePath?: string | null;
+  sourceLineNumber?: number | null;
+  sourcePreview?: string | null;
+  continuationEntry?: string | null;
+};
+
+export type CSharpBackendTrace = {
+  query: string;
+  status: string;
+  steps: CSharpBackendTraceStep[];
+  warnings: string[];
+  hiddenStepCount: number;
+  hasMore: boolean;
+  continuationEntry?: string | null;
+  stopReason?: string | null;
+};
+
+export type CSharpTracePreferences = {
+  defaultDepth: number;
+  showFrameworkCalls: boolean;
+  showBoundaryCalls: boolean;
 };
 
 export type OverviewSection = "guide" | "technology" | "flow" | "api" | "data" | "azure" | "folder";

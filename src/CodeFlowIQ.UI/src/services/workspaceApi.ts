@@ -1,9 +1,11 @@
-import type { ApiHealth, RepositoryExplorerItem, RepositoryExplorerRelatedGroup, RepositoryOverview, RuntimeFlowMap, WorkspaceSummary } from "../types";
+import type { ApiHealth, CSharpBackendTrace, IndexingJobStatus, RepositoryExplorerItem, RepositoryExplorerRelatedGroup, RepositoryOverview, RuntimeFlowMap, WorkspaceSummary } from "../types";
 
 type WorkspaceApiClient = {
   checkHealth: () => Promise<ApiHealth>;
   initializeWorkspace: (workspacePath: string) => Promise<unknown>;
   syncWorkspace: (workspacePath: string) => Promise<unknown>;
+  cancelIndexing: (workspacePath: string) => Promise<IndexingJobStatus>;
+  loadIndexingStatus: (workspacePath: string) => Promise<IndexingJobStatus>;
   loadSummary: (workspacePath: string, take?: number) => Promise<WorkspaceSummary>;
   loadOverview: (workspacePath: string, take?: number) => Promise<RepositoryOverview>;
   loadRuntimeMap: (workspacePath: string, take?: number) => Promise<RuntimeFlowMap>;
@@ -14,6 +16,8 @@ type WorkspaceApiClient = {
   loadFileRows: (workspacePath: string, language: string, folder: string, take: number) => Promise<string[]>;
   loadExplorerItems: (workspacePath: string, surface: string, query: string, take: number, selectedItemId?: string | null) => Promise<RepositoryExplorerItem[]>;
   loadExplorerRelatedItems: (workspacePath: string, surface: string, itemId: string, take: number) => Promise<RepositoryExplorerRelatedGroup[]>;
+  loadCSharpBackendTrace: (workspacePath: string, entry: string, depth: number) => Promise<CSharpBackendTrace>;
+  loadCSharpTraceEntries: (workspacePath: string, take: number) => Promise<string[]>;
 };
 
 export function createWorkspaceApi(baseUrl: string): WorkspaceApiClient {
@@ -35,6 +39,10 @@ export function createWorkspaceApi(baseUrl: string): WorkspaceApiClient {
       request("/api/workspace/init", workspaceMutation(workspacePath)),
     syncWorkspace: (workspacePath) =>
       request("/api/workspace/sync", workspaceMutation(workspacePath)),
+    cancelIndexing: (workspacePath) =>
+      request<IndexingJobStatus>("/api/workspace/indexing-cancel", workspaceMutation(workspacePath)),
+    loadIndexingStatus: (workspacePath) =>
+      request<IndexingJobStatus>(`/api/workspace/indexing-status?path=${encode(workspacePath)}`),
     loadSummary: (workspacePath, take = 8) =>
       request<WorkspaceSummary>(`/api/summary?path=${encode(workspacePath)}&take=${take}`),
     loadOverview: (workspacePath, take = 8) =>
@@ -56,7 +64,11 @@ export function createWorkspaceApi(baseUrl: string): WorkspaceApiClient {
     loadExplorerItems: (workspacePath, surface, query, take, selectedItemId) =>
       request<RepositoryExplorerItem[]>(`/api/explorer?path=${encode(workspacePath)}&surface=${encode(surface)}&q=${encode(query)}&selectedItemId=${encode(selectedItemId ?? "")}&take=${take}`),
     loadExplorerRelatedItems: (workspacePath, surface, itemId, take) =>
-      request<RepositoryExplorerRelatedGroup[]>(`/api/explorer/related?path=${encode(workspacePath)}&surface=${encode(surface)}&itemId=${encode(itemId)}&take=${take}`)
+      request<RepositoryExplorerRelatedGroup[]>(`/api/explorer/related?path=${encode(workspacePath)}&surface=${encode(surface)}&itemId=${encode(itemId)}&take=${take}`),
+    loadCSharpBackendTrace: (workspacePath, entry, depth) =>
+      request<CSharpBackendTrace>(`/api/csharp-backend-trace?path=${encode(workspacePath)}&entry=${encode(entry)}&depth=${depth}`),
+    loadCSharpTraceEntries: (workspacePath, take) =>
+      request<string[]>(`/api/csharp-backend-trace/entries?path=${encode(workspacePath)}&take=${take}`)
   };
 }
 

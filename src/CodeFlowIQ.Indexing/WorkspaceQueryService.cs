@@ -8,13 +8,15 @@ public sealed class WorkspaceQueryService : IWorkspaceQueryService
     private readonly FlowChainQueryHandler _flowChains;
     private readonly RepositoryOverviewQueryHandler _overview;
     private readonly RuntimeFlowQueryHandler _runtimeFlows;
+    private readonly CSharpBackendTraceQueryHandler _csharpBackendTrace;
 
     public WorkspaceQueryService()
         : this(
             new WorkspaceInventoryQueryHandler(),
             new FlowChainQueryHandler(),
             new RepositoryOverviewQueryHandler(),
-            new RuntimeFlowQueryHandler())
+            new RuntimeFlowQueryHandler(),
+            new CSharpBackendTraceQueryHandler())
     {
     }
 
@@ -22,12 +24,14 @@ public sealed class WorkspaceQueryService : IWorkspaceQueryService
         WorkspaceInventoryQueryHandler inventory,
         FlowChainQueryHandler flowChains,
         RepositoryOverviewQueryHandler overview,
-        RuntimeFlowQueryHandler runtimeFlows)
+        RuntimeFlowQueryHandler runtimeFlows,
+        CSharpBackendTraceQueryHandler csharpBackendTrace)
     {
         _inventory = inventory;
         _flowChains = flowChains;
         _overview = overview;
         _runtimeFlows = runtimeFlows;
+        _csharpBackendTrace = csharpBackendTrace;
     }
 
     public Task<WorkspaceStatus?> GetStatusAsync(string workspacePath, CancellationToken cancellationToken) =>
@@ -134,6 +138,21 @@ public sealed class WorkspaceQueryService : IWorkspaceQueryService
             maxDepth,
             take,
             cancellationToken);
+
+    public Task<CSharpBackendTrace?> GetCSharpBackendTraceAsync(
+        string workspacePath,
+        string entry,
+        bool includeTests,
+        int maxDepth,
+        CancellationToken cancellationToken) =>
+        _csharpBackendTrace.GetTraceAsync(workspacePath, entry, includeTests, maxDepth, cancellationToken);
+
+    public Task<IReadOnlyList<string>> ListCSharpBackendTraceEntriesAsync(
+        string workspacePath,
+        bool includeTests,
+        int take,
+        CancellationToken cancellationToken) =>
+        _csharpBackendTrace.ListEntriesAsync(workspacePath, includeTests, take, cancellationToken);
 
     public Task<WorkspaceSummary?> GetSummaryAsync(
         string workspacePath,

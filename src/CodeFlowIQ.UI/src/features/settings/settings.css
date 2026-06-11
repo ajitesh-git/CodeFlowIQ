@@ -1,0 +1,114 @@
+.settings-page {
+  display: grid;
+  gap: 16px;
+}
+
+.settings-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.settings-section header {
+  display: grid;
+  gap: 4px;
+}
+
+.settings-section header span {
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.settings-section h2 {
+  color: var(--text-strong);
+  font-size: 18px;
+  margin: 0;
+}
+
+.settings-theme-switch {
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 180px));
+  padding: 6px;
+  width: max-content;
+}
+
+.settings-theme-switch button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--text-muted);
+  display: inline-flex;
+  gap: 8px;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 14px;
+}
+
+.settings-theme-switch button.active,
+.settings-theme-switch button:hover,
+.settings-theme-switch button:focus-visible {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  outline: none;
+}
+
+.settings-toggle-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+}
+
+.settings-preference-list {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+}
+
+.settings-trace-controls {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(180px, 220px) repeat(2, minmax(220px, 1fr));
+}
+
+.settings-trace-controls label {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-trace-controls input {
+  width: 100%;
+}
+
+.settings-preference-list div {
+  align-items: center;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  display: flex;
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px 12px;
+}
+
+.settings-preference-list svg {
+  color: var(--accent-strong);
+  flex: 0 0 auto;
+}
+
+@media (max-width: 760px) {
+  .settings-theme-switch,
+  .settings-toggle-grid,
+  .settings-trace-controls,
+  .settings-preference-list {
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+}

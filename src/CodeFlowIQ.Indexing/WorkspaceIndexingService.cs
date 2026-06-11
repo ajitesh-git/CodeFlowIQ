@@ -14,15 +14,26 @@ public sealed class WorkspaceIndexingService(
     IEnumerable<ILanguageAnalyzer> analyzers,
     IndexingOptions options) : IWorkspaceIndexingService
 {
+    private const string DefaultAnalysisSchemaVersion = "analysis-v1";
+    private const string CSharpAnalysisSchemaVersion = "csharp-analysis-v2";
     private readonly IReadOnlyList<ILanguageAnalyzer> _analyzers = analyzers.ToList();
 
-    public Task<IndexingSummary> InitializeAsync(string workspacePath, CancellationToken cancellationToken) =>
-        IndexAsync(workspacePath, cancellationToken);
+    public Task<IndexingSummary> InitializeAsync(
+        string workspacePath,
+        CancellationToken cancellationToken,
+        IProgress<IndexingProgress>? progress = null) =>
+        IndexAsync(workspacePath, cancellationToken, progress);
 
-    public Task<IndexingSummary> SyncAsync(string workspacePath, CancellationToken cancellationToken) =>
-        IndexAsync(workspacePath, cancellationToken);
+    public Task<IndexingSummary> SyncAsync(
+        string workspacePath,
+        CancellationToken cancellationToken,
+        IProgress<IndexingProgress>? progress = null) =>
+        IndexAsync(workspacePath, cancellationToken, progress);
 
-    private async Task<IndexingSummary> IndexAsync(string workspacePath, CancellationToken cancellationToken)
+    private async Task<IndexingSummary> IndexAsync(
+        string workspacePath,
+        CancellationToken cancellationToken,
+        IProgress<IndexingProgress>? progress)
     {
         var startedAt = DateTimeOffset.UtcNow;
         var rootPath = Path.GetFullPath(workspacePath);
@@ -30,6 +41,8 @@ public sealed class WorkspaceIndexingService(
         {
             throw new DirectoryNotFoundException($"Workspace path does not exist: {rootPath}");
         }
+
+        progress?.Report(new IndexingProgress("Preparing", 0, 0, 0, 0, null, "Preparing workspace index."));
 
         await using var db = await WorkspaceDatabase.OpenMigratedAsync(rootPath, cancellationToken);
         var ignoreRules = IgnoreRuleSet.Load(rootPath, options);
@@ -76,21 +89,43 @@ public sealed class WorkspaceIndexingService(
             var relativePath = Path.GetRelativePath(rootPath, filePath);
             seenPaths.Add(relativePath);
 
+            if (filesScanned == 1 || filesScanned % 100 == 0)
+            {
+                progress?.Report(new IndexingProgress(
+                    "Scanning",
+                    filesScanned,
+                    filesIndexed,
+                    filesSkipped,
+                    symbolsIndexed,
+                    relativePath,
+                    $"Scanned {filesScanned} files."));
+            }
+
             if (fileInfo.Length > options.MaxFileSizeKb * 1024L || IsGeneratedFile(fileInfo.Name))
             {
                 filesSkipped++;
                 continue;
             }
 
-            var hash = await ComputeSha256Async(filePath, cancellationToken);
             var languageId = languageDetector.Detect(filePath);
+            var fileHash = await ComputeSha256Async(filePath, cancellationToken);
+            var contentHash = CreateIndexedContentHash(languageId, fileHash);
 
             if (existingFiles.TryGetValue(relativePath, out var existing)
-                && existing.ContentHash == hash
+                && existing.ContentHash == contentHash
                 && existing.IsDeleted == false)
             {
                 continue;
             }
+
+            progress?.Report(new IndexingProgress(
+                "Indexing",
+                filesScanned,
+                filesIndexed,
+                filesSkipped,
+                symbolsIndexed,
+                relativePath,
+                $"Indexing {relativePath}."));
 
             var indexedFile = existing ?? new IndexedFile
             {
@@ -98,12 +133,12 @@ public sealed class WorkspaceIndexingService(
                 RelativePath = relativePath,
                 FullPath = filePath,
                 LanguageId = languageId,
-                ContentHash = hash
+                ContentHash = contentHash
             };
 
             indexedFile.FullPath = filePath;
             indexedFile.LanguageId = languageId;
-            indexedFile.ContentHash = hash;
+            indexedFile.ContentHash = contentHash;
             indexedFile.SizeBytes = fileInfo.Length;
             indexedFile.LastWriteTimeUtc = fileInfo.LastWriteTimeUtc;
             indexedFile.IndexedAt = DateTimeOffset.UtcNow;
@@ -168,6 +203,15 @@ public sealed class WorkspaceIndexingService(
             }
 
             filesIndexed++;
+
+            progress?.Report(new IndexingProgress(
+                "Indexing",
+                filesScanned,
+                filesIndexed,
+                filesSkipped,
+                symbolsIndexed,
+                relativePath,
+                $"Indexed {filesIndexed} changed files."));
         }
 
         foreach (var indexedFile in existingFiles.Values.Where(x => !seenPaths.Contains(x.RelativePath)))
@@ -177,6 +221,15 @@ public sealed class WorkspaceIndexingService(
             RemoveRelationshipsForFile(db, workspace.Id, indexedFile.RelativePath);
         }
 
+        progress?.Report(new IndexingProgress(
+            "Finalizing",
+            filesScanned,
+            filesIndexed,
+            filesSkipped,
+            symbolsIndexed,
+            null,
+            "Finalizing relationships."));
+
         workspace.LastIndexedAt = DateTimeOffset.UtcNow;
         workspace.UpdatedAt = workspace.LastIndexedAt.Value;
         await db.SaveChangesAsync(cancellationToken);
@@ -184,7 +237,7 @@ public sealed class WorkspaceIndexingService(
         await ResolveCrossStackApiRelationshipsAsync(db, workspace.Id, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
 
-        return new IndexingSummary(
+        var summary = new IndexingSummary(
             workspace.Id,
             workspace.Name,
             filesScanned,
@@ -193,6 +246,17 @@ public sealed class WorkspaceIndexingService(
             symbolsIndexed,
             startedAt,
             DateTimeOffset.UtcNow);
+
+        progress?.Report(new IndexingProgress(
+            "Completed",
+            filesScanned,
+            filesIndexed,
+            filesSkipped,
+            symbolsIndexed,
+            null,
+            "Workspace index is ready."));
+
+        return summary;
     }
 
     private async Task<CodeAnalysisResult> AnalyzeAsync(string filePath, CancellationToken cancellationToken)
@@ -266,6 +330,14 @@ public sealed class WorkspaceIndexingService(
         var hash = await SHA256.HashDataAsync(stream, cancellationToken);
         return Convert.ToHexString(hash);
     }
+
+    private static string CreateIndexedContentHash(string languageId, string fileHash) =>
+        $"{GetAnalysisSchemaVersion(languageId)}:{fileHash}";
+
+    private static string GetAnalysisSchemaVersion(string languageId) =>
+        languageId.Equals("csharp", StringComparison.OrdinalIgnoreCase)
+            ? CSharpAnalysisSchemaVersion
+            : DefaultAnalysisSchemaVersion;
 
     private static CodeRelationship CreateRelationship(
         int workspaceId,

@@ -147,7 +147,17 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
         using var initResponse = await client.PostAsJsonAsync("/api/workspace/init", new { path = workspacePath });
         initResponse.EnsureSuccessStatusCode();
         var initJson = await JsonDocument.ParseAsync(await initResponse.Content.ReadAsStreamAsync());
-        Assert.Equal("3", initJson.RootElement.GetProperty("filesIndexed").GetRawText());
+        var initState = initJson.RootElement.GetProperty("state").GetString();
+        Assert.True(initState is "queued" or "running", $"Expected queued or running, got {initState}.");
+        var completedInit = await WaitForIndexingAsync(client, workspacePath);
+        Assert.Equal("completed", completedInit.GetProperty("state").GetString());
+        Assert.Equal(3, completedInit.GetProperty("summary").GetProperty("filesIndexed").GetInt32());
+
+        using var cachedInitResponse = await client.PostAsJsonAsync("/api/workspace/init", new { path = workspacePath });
+        cachedInitResponse.EnsureSuccessStatusCode();
+        var cachedInitJson = await JsonDocument.ParseAsync(await cachedInitResponse.Content.ReadAsStreamAsync());
+        Assert.Equal(0, cachedInitJson.RootElement.GetProperty("filesIndexed").GetInt32());
+        Assert.True(cachedInitJson.RootElement.GetProperty("reusedExistingIndex").GetBoolean());
 
         var encodedPath = Uri.EscapeDataString(workspacePath);
         var summary = await client.GetFromJsonAsync<JsonElement>($"/api/summary?path={encodedPath}&take=5");
@@ -252,5 +262,26 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
                 INSERT INTO dbo.Users (Name) VALUES ('Ada');
             END
             """);
+    }
+
+    private static async Task<JsonElement> WaitForIndexingAsync(HttpClient client, string workspacePath)
+    {
+        var encodedPath = Uri.EscapeDataString(workspacePath);
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            using var response = await client.GetAsync($"/api/workspace/indexing-status?path={encodedPath}");
+            response.EnsureSuccessStatusCode();
+            using var json = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+            var root = json.RootElement.Clone();
+            var state = root.GetProperty("state").GetString();
+            if (state is "completed" or "failed" or "cancelled")
+            {
+                return root;
+            }
+
+            await Task.Delay(100);
+        }
+
+        throw new TimeoutException("Indexing did not finish during the test window.");
     }
 }

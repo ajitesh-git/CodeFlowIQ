@@ -3,6 +3,9 @@ import { getDefaultRuntimeConnection } from "../runtime";
 import { createWorkspaceApi } from "../services/workspaceApi";
 import type {
   ApiHealth,
+  CSharpBackendTrace,
+  CSharpTracePreferences,
+  IndexingJobStatus,
   OverviewSection,
   RepositoryExplorerRelatedGroup,
   RepositoryOverview,
@@ -18,8 +21,14 @@ const defaultRuntimeConnection = getDefaultRuntimeConnection();
 const defaultWorkspacePath = localStorage.getItem("codeflowiq.workspacePath") ?? "";
 type ThemeMode = "light" | "dark";
 const defaultTheme = (localStorage.getItem("codeflowiq.theme") === "dark" ? "dark" : "light") satisfies ThemeMode;
+const defaultTracePreferences: CSharpTracePreferences = {
+  defaultDepth: readNumberSetting("codeflowiq.csharpTrace.defaultDepth", 80, 8, 200),
+  showFrameworkCalls: localStorage.getItem("codeflowiq.csharpTrace.showFrameworkCalls") === "true",
+  showBoundaryCalls: localStorage.getItem("codeflowiq.csharpTrace.showBoundaryCalls") !== "false"
+};
 const defaultChainLimit = 1000;
 const defaultApiRouteLimit = 1000;
+const indexingPollDelayMs = 1000;
 const emptyRepositoryExplorerRows: RepositoryExplorerRows = {
   files: [],
   apis: [],
@@ -39,6 +48,12 @@ export function useWorkspaceData() {
   const [apiFilter, setApiFilter] = useState("");
   const [targetFilter, setTargetFilter] = useState("");
   const [chains, setChains] = useState<string[]>([]);
+  const [csharpTraceEntry, setCSharpTraceEntry] = useState("");
+  const [csharpTraceDepth, setCSharpTraceDepth] = useState(defaultTracePreferences.defaultDepth);
+  const [csharpTrace, setCSharpTrace] = useState<CSharpBackendTrace | null>(null);
+  const [csharpTraceEntries, setCSharpTraceEntries] = useState<string[]>([]);
+  const [csharpTracePreferences, setCSharpTracePreferences] =
+    useState<CSharpTracePreferences>(defaultTracePreferences);
   const [backendRows, setBackendRows] = useState<string[]>([]);
   const [apiRows, setApiRows] = useState<string[]>([]);
   const [azureRows, setAzureRows] = useState<string[]>([]);
@@ -56,10 +71,16 @@ export function useWorkspaceData() {
   const [activePanel, setActivePanel] = useState<AppPanel>("overview");
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string>("Ready");
+  const [indexingStatus, setIndexingStatus] = useState<IndexingJobStatus | null>(null);
+  const [indexingRequestActive, setIndexingRequestActive] = useState(false);
 
   const normalizedApiBaseUrl = useMemo(() => apiBaseUrl.trim().replace(/\/$/, ""), [apiBaseUrl]);
   const api = useMemo(() => createWorkspaceApi(normalizedApiBaseUrl), [normalizedApiBaseUrl]);
   const canQueryWorkspace = workspacePath.trim().length > 0 && health?.status === "healthy";
+  const isIndexingActive = indexingRequestActive
+    || indexingStatus?.state === "queued"
+    || indexingStatus?.state === "running"
+    || indexingStatus?.state === "cancelling";
   const isBusy = busy !== null;
 
   useEffect(() => {
@@ -70,6 +91,12 @@ export function useWorkspaceData() {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem("codeflowiq.theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem("codeflowiq.csharpTrace.defaultDepth", String(csharpTracePreferences.defaultDepth));
+    localStorage.setItem("codeflowiq.csharpTrace.showFrameworkCalls", String(csharpTracePreferences.showFrameworkCalls));
+    localStorage.setItem("codeflowiq.csharpTrace.showBoundaryCalls", String(csharpTracePreferences.showBoundaryCalls));
+  }, [csharpTracePreferences]);
 
   async function runTask<T>(label: string, task: () => Promise<T>): Promise<T | null> {
     setBusy(label);
@@ -100,20 +127,78 @@ export function useWorkspaceData() {
 
   async function initializeWorkspace() {
     const path = workspacePath.trim();
-    const result = await runTask("Indexing workspace", () => api.initializeWorkspace(path));
-    if (result) {
-      localStorage.setItem("codeflowiq.workspacePath", path);
-      await loadWorkspacePanels();
-    }
+    await startWorkspaceIndexing("Indexing workspace", path, () => api.initializeWorkspace(path));
   }
 
   async function syncWorkspace() {
     const path = workspacePath.trim();
-    const result = await runTask("Syncing workspace", () => api.syncWorkspace(path));
-    if (result) {
+    await startWorkspaceIndexing("Refreshing index", path, () => api.syncWorkspace(path));
+  }
+
+  async function startWorkspaceIndexing(label: string, path: string, start: () => Promise<unknown>) {
+    setIndexingRequestActive(true);
+    setBusy(label);
+    setMessage(label);
+    try {
+      const result = await start();
       localStorage.setItem("codeflowiq.workspacePath", path);
+
+      if (!isIndexingJobStatus(result)) {
+        setIndexingStatus(null);
+        setMessage("Loading insights from the existing index");
+        await loadWorkspacePanels();
+        setMessage("Ready");
+        return;
+      }
+
+      const completedStatus = await pollIndexingUntilComplete(path, result);
+      if (completedStatus.state === "failed" || completedStatus.state === "cancelled") {
+        setMessage(completedStatus.error || completedStatus.message || "Indexing failed");
+        return;
+      }
+
+      setMessage("Index ready. Loading insights");
       await loadWorkspacePanels();
+      setMessage("Ready");
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "Unexpected error";
+      setMessage(text);
+    } finally {
+      setIndexingRequestActive(false);
+      setBusy(null);
     }
+  }
+
+  async function pollIndexingUntilComplete(path: string, firstStatus: IndexingJobStatus) {
+    let status = firstStatus;
+    setIndexingStatus(status);
+    setMessage(formatIndexingMessage(status));
+
+    while (status.state === "queued" || status.state === "running" || status.state === "cancelling") {
+      await delay(indexingPollDelayMs);
+      status = await api.loadIndexingStatus(path);
+      setIndexingStatus(status);
+      setMessage(formatIndexingMessage(status));
+    }
+
+    return status;
+  }
+
+  async function cancelIndexing() {
+    const path = workspacePath.trim();
+    setMessage("Cancelling indexing");
+    try {
+      const status = await api.cancelIndexing(path);
+      setIndexingStatus(status);
+      setMessage(formatIndexingMessage(status));
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "Unable to cancel indexing";
+      setMessage(text);
+    }
+  }
+
+  async function retryIndexing() {
+    await syncWorkspace();
   }
 
   async function loadSummary() {
@@ -143,6 +228,42 @@ export function useWorkspaceData() {
     );
     if (result) {
       setChains(result);
+    }
+  }
+
+  async function loadCSharpTrace(entryOverride?: string, depthOverride = csharpTraceDepth) {
+    const normalizedEntry = (entryOverride ?? csharpTraceEntry).trim();
+    if (!normalizedEntry) {
+      setMessage("Enter an API route or method to trace.");
+      return;
+    }
+
+    const result = await runTask("Tracing C# backend path", () =>
+      api.loadCSharpBackendTrace(workspacePath, normalizedEntry, depthOverride)
+    );
+    if (result) {
+      setCSharpTrace(result);
+    }
+  }
+
+  function updateCSharpTracePreferences(next: Partial<CSharpTracePreferences>) {
+    setCSharpTracePreferences((current) => {
+      const merged = {
+        ...current,
+        ...next,
+        defaultDepth: Math.min(200, Math.max(8, Math.round(next.defaultDepth ?? current.defaultDepth)))
+      };
+      setCSharpTraceDepth(merged.defaultDepth);
+      return merged;
+    });
+  }
+
+  async function loadCSharpTraceEntries(take = 5000) {
+    const result = await runTask("Loading C# routes and methods", () =>
+      api.loadCSharpTraceEntries(workspacePath, take)
+    );
+    if (result) {
+      setCSharpTraceEntries(result);
     }
   }
 
@@ -337,6 +458,12 @@ export function useWorkspaceData() {
       setChainLimit(defaultChainLimit);
       void loadChains("", "", defaultChainLimit);
     }
+    if (panel === "csharpTrace" && !csharpTrace && canQueryWorkspace && csharpTraceEntry.trim().length > 0) {
+      void loadCSharpTrace();
+    }
+    if (panel === "csharpTrace" && csharpTraceEntries.length === 0 && canQueryWorkspace) {
+      void loadCSharpTraceEntries();
+    }
     if (panel === "explorer" && repositoryExplorerRows[repositoryExplorerSurface].length === 0 && canQueryWorkspace) {
       void loadRepositoryExplorerSurface(repositoryExplorerSurface);
     }
@@ -365,6 +492,11 @@ export function useWorkspaceData() {
     apiFilter,
     targetFilter,
     chains,
+    csharpTraceEntry,
+    csharpTraceDepth,
+    csharpTrace,
+    csharpTraceEntries,
+    csharpTracePreferences,
     backendRows,
     apiRows,
     azureRows,
@@ -382,13 +514,18 @@ export function useWorkspaceData() {
     theme,
     busy,
     message,
+    indexingStatus,
     canQueryWorkspace,
+    isIndexingActive,
     isBusy,
     setApiBaseUrl,
     setApiSource,
     setWorkspacePath,
     setApiFilter,
     setTargetFilter,
+    setCSharpTraceEntry,
+    setCSharpTraceDepth,
+    setCSharpTracePreferences: updateCSharpTracePreferences,
     setAzureFilter,
     setFileLanguageFilter,
     setFileFolderFilter,
@@ -398,10 +535,14 @@ export function useWorkspaceData() {
     checkHealth,
     initializeWorkspace,
     syncWorkspace,
+    cancelIndexing,
+    retryIndexing,
     loadWorkspacePanels,
     loadOverview,
     loadRuntimeMap,
     loadChains,
+    loadCSharpTrace,
+    loadCSharpTraceEntries,
     loadBackendRows,
     loadApiRows,
     loadAzureRows,
@@ -415,4 +556,50 @@ export function useWorkspaceData() {
     browseOverviewSection,
     openPanel
   };
+}
+
+function readNumberSetting(key: string, fallback: number, min: number, max: number) {
+  const value = Number(localStorage.getItem(key));
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+function isIndexingJobStatus(value: unknown): value is IndexingJobStatus {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Partial<IndexingJobStatus>;
+  return typeof candidate.jobId === "string"
+    && typeof candidate.state === "string"
+    && typeof candidate.stage === "string"
+    && typeof candidate.filesScanned === "number";
+}
+
+function formatIndexingMessage(status: IndexingJobStatus) {
+  const currentFile = status.currentFile ? ` • ${compactPath(status.currentFile)}` : "";
+  if (status.state === "failed") {
+    return status.error || status.message || "Indexing failed";
+  }
+
+  if (status.state === "cancelled") {
+    return "Indexing cancelled";
+  }
+
+  if (status.state === "completed") {
+    return `Index ready • scanned ${status.filesScanned}, indexed ${status.filesIndexed}`;
+  }
+
+  return `${status.stage} • scanned ${status.filesScanned}, indexed ${status.filesIndexed}, skipped ${status.filesSkipped}${currentFile}`;
+}
+
+function compactPath(path: string) {
+  return path.length > 80 ? `...${path.slice(-77)}` : path;
+}
+
+function delay(milliseconds: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }

@@ -7,10 +7,12 @@ export type AppPanel =
   | "explorer"
   | "summary"
   | "chains"
+  | "csharpTrace"
   | "backend"
   | "apis"
   | "azure"
-  | "files";
+  | "files"
+  | "settings";
 
 export type OverviewNavigation =
   | { panel: "explorer"; surface: RepositoryExplorerSurface; query: string }
