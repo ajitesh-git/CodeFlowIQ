@@ -544,9 +544,9 @@ public sealed class RuntimeFlowQueryHandler
 
         var ignored = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "Deloitte",
-            "Omnia",
-            "FinancialFacts",
+            "Company",
+            "Platform",
+            "Product",
             "Api",
             "Functions",
             "Function",

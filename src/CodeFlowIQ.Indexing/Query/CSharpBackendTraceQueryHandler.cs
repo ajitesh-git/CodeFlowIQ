@@ -1037,7 +1037,10 @@ public sealed class CSharpBackendTraceQueryHandler
         }
 
         private static string NormalizeSearch(string value) =>
-            value.Trim().Trim('/').Replace("{engagementId:guid}", "{engagementId}", StringComparison.OrdinalIgnoreCase);
+            System.Text.RegularExpressions.Regex.Replace(
+                value.Trim().Trim('/'),
+                "\\{([^}:]+):[^}]+\\}",
+                "{$1}");
 
         private static string? MetadataValue(string? metadata, string key)
         {

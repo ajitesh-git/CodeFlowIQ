@@ -39,7 +39,7 @@ export function WorkspaceBar({
         <label>
           Repository folder
           <input
-            placeholder="C:\\Users\\ajite\\Downloads\\Compressed\\deloitte-omnia-financial-be"
+            placeholder="C:\\Users\\you\\source\\sample-enterprise-platform"
             value={workspacePath}
             onChange={(event) => onWorkspacePathChange(event.target.value)}
           />

@@ -57,7 +57,7 @@ export function CSharpTracePanel({
             aria-autocomplete="list"
             aria-controls="csharp-trace-routes"
             aria-expanded={showEntrySuggestions && visibleEntryOptions.length > 0}
-            placeholder="Example: POST /v4/engagements/{engagementId}/CarryForwardLevvia/FinancialTrialBalanceCarryForward"
+            placeholder="Example: POST /v4/projects/{projectId}/DataImport/ImportLedgerSnapshot"
             value={entry}
             onBlur={() => window.setTimeout(() => setShowEntrySuggestions(false), 120)}
             onChange={(event) => {

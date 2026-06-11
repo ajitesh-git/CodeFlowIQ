@@ -75,19 +75,19 @@ public sealed class WorkspaceIndexingServiceTests
         Directory.CreateDirectory(workspacePath);
 
         await File.WriteAllTextAsync(
-            Path.Combine(workspacePath, "CarryForward.cs"),
+            Path.Combine(workspacePath, "DataImport.cs"),
             """
-            public sealed class CarryForwardTrialBalanceLevviaManager : CarryForwardLevviaBase
+            public sealed class LedgerSnapshotImportManager : DataImportProcessorBase
             {
                 public void Run()
                 {
-                    FinancialCarryForwardInternalAsync();
+                    ImportDataInternalAsync();
                 }
             }
 
-            public abstract class CarryForwardLevviaBase
+            public abstract class DataImportProcessorBase
             {
-                protected void FinancialCarryForwardInternalAsync() { }
+                protected void ImportDataInternalAsync() { }
             }
             """);
 
@@ -96,7 +96,7 @@ public sealed class WorkspaceIndexingServiceTests
 
         await using (var db = await WorkspaceDatabase.OpenMigratedAsync(workspacePath, CancellationToken.None))
         {
-            var indexedFile = await db.IndexedFiles.SingleAsync(x => x.RelativePath == "CarryForward.cs");
+            var indexedFile = await db.IndexedFiles.SingleAsync(x => x.RelativePath == "DataImport.cs");
             indexedFile.ContentHash = indexedFile.ContentHash.Replace("csharp-analysis-v2:", string.Empty, StringComparison.Ordinal);
             await db.SaveChangesAsync();
         }
@@ -104,7 +104,7 @@ public sealed class WorkspaceIndexingServiceTests
         var summary = await service.SyncAsync(workspacePath, CancellationToken.None);
 
         await using var refreshedDb = await WorkspaceDatabase.OpenMigratedAsync(workspacePath, CancellationToken.None);
-        var refreshedFile = await refreshedDb.IndexedFiles.SingleAsync(x => x.RelativePath == "CarryForward.cs");
+        var refreshedFile = await refreshedDb.IndexedFiles.SingleAsync(x => x.RelativePath == "DataImport.cs");
         var relationships = await refreshedDb.CodeRelationships
             .Where(x => x.WorkspaceId == refreshedFile.WorkspaceId)
             .Select(x => $"{x.RelationshipKind}:{x.SourceIdentifier}->{x.TargetIdentifier}")
@@ -347,15 +347,15 @@ public sealed class WorkspaceIndexingServiceTests
         Directory.CreateDirectory(workspacePath);
 
         await File.WriteAllTextAsync(
-            Path.Combine(workspacePath, "CortexSystem.cs"),
+            Path.Combine(workspacePath, "HttpGatewaySystem.cs"),
             """
             using System.Net.Http;
 
-            public sealed class CortexSystem
+            public sealed class HttpGatewaySystem
             {
                 private readonly HttpClient _httpClient;
 
-                public CortexSystem(HttpClient httpClient)
+                public HttpGatewaySystem(HttpClient httpClient)
                 {
                     _httpClient = httpClient;
                 }
@@ -691,13 +691,13 @@ public sealed class WorkspaceIndexingServiceTests
         Directory.CreateDirectory(Path.Combine(workspacePath, "Sample.Tests"));
 
         await File.WriteAllTextAsync(
-            Path.Combine(workspacePath, "AccountSetupController.cs"),
+            Path.Combine(workspacePath, "ProjectConfigurationController.cs"),
             """
             using Azure.Storage.Blobs;
             using Microsoft.AspNetCore.Mvc;
 
             [Route("api/[controller]")]
-            public sealed class AccountSetupController : ControllerBase
+            public sealed class ProjectConfigurationController : ControllerBase
             {
                 [HttpPost("save")]
                 public IActionResult Save() => Ok();
@@ -705,10 +705,10 @@ public sealed class WorkspaceIndexingServiceTests
             """);
 
         await File.WriteAllTextAsync(
-            Path.Combine(workspacePath, "Sample.Tests", "AccountSetupControllerTests.cs"),
+            Path.Combine(workspacePath, "Sample.Tests", "ProjectConfigurationControllerTests.cs"),
             """
             using Azure.Storage.Blobs;
-            public sealed class AccountSetupControllerTests { }
+            public sealed class ProjectConfigurationControllerTests { }
             """);
 
         var service = CreateService();
@@ -716,12 +716,12 @@ public sealed class WorkspaceIndexingServiceTests
         await service.InitializeAsync(workspacePath, CancellationToken.None);
 
         var query = new WorkspaceQueryService();
-        var apis = await query.ListApisAsync(workspacePath, "POST", "accountsetup", "AccountSetup", false, 10, CancellationToken.None);
+        var apis = await query.ListApisAsync(workspacePath, "POST", "projectconfiguration", "ProjectConfiguration", false, 10, CancellationToken.None);
         var azure = await query.ListAzureServicesAsync(workspacePath, "Blob", false, 10, CancellationToken.None);
         var summary = await query.GetSummaryAsync(workspacePath, false, 10, CancellationToken.None);
 
         Assert.Single(apis);
-        Assert.Contains("POST /api/AccountSetup/save", apis[0], StringComparison.Ordinal);
+        Assert.Contains("POST /api/ProjectConfiguration/save", apis[0], StringComparison.Ordinal);
         AssertStableEvidenceId("relationship:", apis[0]);
         Assert.Single(azure);
         Assert.DoesNotContain("Tests", azure[0], StringComparison.OrdinalIgnoreCase);
@@ -742,7 +742,7 @@ public sealed class WorkspaceIndexingServiceTests
             export class RegisterComponent {
                 register() {
                     this.http.post('/api/register', {});
-                    this.http.post('/v4/engagements/123/accountsetup', {});
+                    this.http.post('/v4/projects/123/projectconfiguration', {});
                 }
             }
             """);
@@ -761,12 +761,12 @@ public sealed class WorkspaceIndexingServiceTests
             """);
 
         await File.WriteAllTextAsync(
-            Path.Combine(workspacePath, "AccountSetupController.cs"),
+            Path.Combine(workspacePath, "ProjectConfigurationController.cs"),
             """
             using Microsoft.AspNetCore.Mvc;
 
-            [Route("v4/engagements/{engagementId}/accountsetup")]
-            public sealed class AccountSetupController : ControllerBase
+            [Route("v4/projects/{projectId}/projectconfiguration")]
+            public sealed class ProjectConfigurationController : ControllerBase
             {
                 [HttpPost]
                 public IActionResult Save() => Ok();
@@ -774,15 +774,15 @@ public sealed class WorkspaceIndexingServiceTests
             """);
 
         await File.WriteAllTextAsync(
-            Path.Combine(workspacePath, "TrialBalanceController.cs"),
+            Path.Combine(workspacePath, "LedgerSummaryController.cs"),
             """
             using Microsoft.AspNetCore.Mvc;
 
-            [Route("v4/engagements/{engagementId}/TrialBalance/GetConsolidationTBSummary/{currency}")]
-            public sealed class TrialBalanceController : ControllerBase
+            [Route("v4/projects/{projectId}/LedgerSummary/GetConsolidationSummary/{currency}")]
+            public sealed class LedgerSummaryController : ControllerBase
             {
                 [HttpGet]
-                public IActionResult GetConsolidationTBSummary() => Ok();
+                public IActionResult GetConsolidationSummary() => Ok();
             }
             """);
 
@@ -797,7 +797,7 @@ public sealed class WorkspaceIndexingServiceTests
             && x.Contains("RegistrationController.cs::Register", StringComparison.Ordinal)
             && x.Contains("match=exact", StringComparison.Ordinal));
         Assert.Contains(flows, x => x.Contains("register.component.ts::register", StringComparison.Ordinal)
-            && x.Contains("AccountSetupController.cs::Save", StringComparison.Ordinal)
+            && x.Contains("ProjectConfigurationController.cs::Save", StringComparison.Ordinal)
             && x.Contains("match=template", StringComparison.Ordinal));
     }
 
@@ -808,27 +808,27 @@ public sealed class WorkspaceIndexingServiceTests
         Directory.CreateDirectory(workspacePath);
 
         await File.WriteAllTextAsync(
-            Path.Combine(workspacePath, "accountSetup.api.js"),
+            Path.Combine(workspacePath, "projectConfiguration.api.js"),
             """
-            const engagementsPrefix = '/engagements/{engagementId}';
-            const accountSetupPrefix = `${engagementsPrefix}/accountsetup`;
+            const projectsPrefix = '/projects/{projectId}';
+            const configurationPrefix = `${projectsPrefix}/projectconfiguration`;
             const routes = {
-              save: accountSetupPrefix,
+              save: configurationPrefix,
             };
 
-            export function saveAccountSetup() {
-              const url = urlFactory(apiSpecifications.financialFacts.key) + routes.save;
+            export function saveProjectConfiguration() {
+              const url = urlFactory(apiSpecifications.operations.key) + routes.save;
               return http.post(url, {});
             }
             """);
 
         await File.WriteAllTextAsync(
-            Path.Combine(workspacePath, "AccountSetupController.cs"),
+            Path.Combine(workspacePath, "ProjectConfigurationController.cs"),
             """
             using Microsoft.AspNetCore.Mvc;
 
-            [Route("v4/engagements/{engagementId}/accountsetup")]
-            public sealed class AccountSetupController : ControllerBase
+            [Route("v4/projects/{projectId}/projectconfiguration")]
+            public sealed class ProjectConfigurationController : ControllerBase
             {
                 [HttpPost]
                 public IActionResult Save() => Ok();
@@ -840,11 +840,11 @@ public sealed class WorkspaceIndexingServiceTests
         await service.InitializeAsync(workspacePath, CancellationToken.None);
 
         var query = new WorkspaceQueryService();
-        var flows = await query.ListFlowsAsync(workspacePath, "accountsetup", null, null, false, 20, CancellationToken.None);
+        var flows = await query.ListFlowsAsync(workspacePath, "projectconfiguration", null, null, false, 20, CancellationToken.None);
 
-        Assert.Contains(flows, x => x.Contains("accountSetup.api.js::saveAccountSetup", StringComparison.Ordinal)
-            && x.Contains("AccountSetupController.cs::Save", StringComparison.Ordinal));
-        Assert.DoesNotContain(flows, x => x.Contains("TrialBalanceController.cs::GetConsolidationTBSummary", StringComparison.Ordinal));
+        Assert.Contains(flows, x => x.Contains("projectConfiguration.api.js::saveProjectConfiguration", StringComparison.Ordinal)
+            && x.Contains("ProjectConfigurationController.cs::Save", StringComparison.Ordinal));
+        Assert.DoesNotContain(flows, x => x.Contains("LedgerSummaryController.cs::GetConsolidationSummary", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -928,134 +928,134 @@ public sealed class WorkspaceIndexingServiceTests
         Directory.CreateDirectory(workspacePath);
 
         await File.WriteAllTextAsync(
-            Path.Combine(workspacePath, "CarryForwardLevviaController.cs"),
+            Path.Combine(workspacePath, "DataImportController.cs"),
             """
             using Microsoft.AspNetCore.Mvc;
 
-            [Route("v4/engagements/{engagementId:guid}/CarryForwardLevvia")]
-            public sealed class CarryForwardLevviaController : ControllerBase
+            [Route("v4/projects/{projectId:guid}/DataImport")]
+            public sealed class DataImportController : ControllerBase
             {
-                private readonly ICarryForwardLevvia _carryForwardTrialBalanceLevvia;
+                private readonly IDataImportProcessor _ledgerSnapshotImporter;
 
-                public CarryForwardLevviaController(
-                    [FromKeyedServices(nameof(CarryForwardTrialBalanceLevviaManager))] ICarryForwardLevvia carryForwardTrialBalanceLevvia)
+                public DataImportController(
+                    [FromKeyedServices(nameof(LedgerSnapshotImportManager))] IDataImportProcessor ledgerSnapshotImporter)
                 {
-                    _carryForwardTrialBalanceLevvia = carryForwardTrialBalanceLevvia;
+                    _ledgerSnapshotImporter = ledgerSnapshotImporter;
                 }
 
                 [HttpPost]
-                [Route("FinancialTrialBalanceCarryForward")]
-                public async Task<IActionResult> FinancialTrialBalanceCarryForward(Guid engagementId, LevviaCFRequestDto levviaCFRequestDto)
+                [Route("ImportLedgerSnapshot")]
+                public async Task<IActionResult> ImportLedgerSnapshot(Guid projectId, DataImportRequestDto dataImportRequestDto)
                 {
                     var requestedBy = Guid.NewGuid();
-                    var isSuccess = await _carryForwardTrialBalanceLevvia.FinancialCarryForwardAsync(engagementId, levviaCFRequestDto, requestedBy);
+                    var isSuccess = await _ledgerSnapshotImporter.ImportDataAsync(projectId, dataImportRequestDto, requestedBy);
                     return Ok();
                 }
             }
             """);
 
         await File.WriteAllTextAsync(
-            Path.Combine(workspacePath, "CarryForwardTrialBalanceLevviaManager.cs"),
+            Path.Combine(workspacePath, "LedgerSnapshotImportManager.cs"),
             """
-            public sealed class CarryForwardTrialBalanceLevviaManager : CarryForwardLevviaBase
+            public sealed class LedgerSnapshotImportManager : DataImportProcessorBase
             {
-                public CarryForwardTrialBalanceLevviaManager(ICarryForwardLevviaRepo carryForwardLevviaRepo, ILevviaSystem levviaSystem, IShardProvider shardProvider, ICortexMigrationDocumentProvider cortexMigrationDocumentProvider)
-                    : base(carryForwardLevviaRepo, levviaSystem, shardProvider, cortexMigrationDocumentProvider)
+                public LedgerSnapshotImportManager(IDataImportRepository dataImportRepository, IExternalArchiveSystem externalArchiveSystem, IShardProvider shardProvider, IBlobDocumentProvider blobDocumentProvider)
+                    : base(dataImportRepository, externalArchiveSystem, shardProvider, blobDocumentProvider)
                 {
                 }
 
-                public override async Task<bool> FinancialCarryForwardAsync(Guid engagementId, LevviaCFRequestDto levviaCFRequestDto, Guid requestedBy)
+                public override async Task<bool> ImportDataAsync(Guid projectId, DataImportRequestDto dataImportRequestDto, Guid requestedBy)
                 {
-                    return await FinancialCarryForwardInternalAsync(engagementId, levviaCFRequestDto, requestedBy);
+                    return await ImportDataInternalAsync(projectId, dataImportRequestDto, requestedBy);
                 }
 
                 protected override async Task<bool> ProcessDataAsync()
                 {
-                    await carryForwardLevviaRepo.SaveFinancialTrialBalanceCarryForward(Guid.NewGuid(), new LevviaCFRequestDto());
+                    await dataImportRepository.SaveLedgerSnapshotImport(Guid.NewGuid(), new DataImportRequestDto());
                     return true;
                 }
             }
             """);
 
         await File.WriteAllTextAsync(
-            Path.Combine(workspacePath, "CarryForwardLevviaBase.cs"),
+            Path.Combine(workspacePath, "DataImportProcessorBase.cs"),
             """
-            public abstract class CarryForwardLevviaBase : ICarryForwardLevvia
+            public abstract class DataImportProcessorBase : IDataImportProcessor
             {
-                protected readonly ICarryForwardLevviaRepo carryForwardLevviaRepo;
-                protected readonly ILevviaSystem levviaSystem;
+                protected readonly IDataImportRepository dataImportRepository;
+                protected readonly IExternalArchiveSystem externalArchiveSystem;
                 protected readonly IShardProvider shardProvider;
-                protected readonly ICortexMigrationDocumentProvider cortexMigrationDocumentProvider;
+                protected readonly IBlobDocumentProvider blobDocumentProvider;
 
-                protected CarryForwardLevviaBase(ICarryForwardLevviaRepo carryForwardLevviaRepo, ILevviaSystem levviaSystem, IShardProvider shardProvider, ICortexMigrationDocumentProvider cortexMigrationDocumentProvider)
+                protected DataImportProcessorBase(IDataImportRepository dataImportRepository, IExternalArchiveSystem externalArchiveSystem, IShardProvider shardProvider, IBlobDocumentProvider blobDocumentProvider)
                 {
-                    this.carryForwardLevviaRepo = carryForwardLevviaRepo;
-                    this.levviaSystem = levviaSystem;
+                    this.dataImportRepository = dataImportRepository;
+                    this.externalArchiveSystem = externalArchiveSystem;
                     this.shardProvider = shardProvider;
-                    this.cortexMigrationDocumentProvider = cortexMigrationDocumentProvider;
+                    this.blobDocumentProvider = blobDocumentProvider;
                 }
 
-                public abstract Task<bool> FinancialCarryForwardAsync(Guid engagementId, LevviaCFRequestDto levviaCFRequestDto, Guid requestedBy);
+                public abstract Task<bool> ImportDataAsync(Guid projectId, DataImportRequestDto dataImportRequestDto, Guid requestedBy);
                 protected abstract Task<bool> ProcessDataAsync();
 
-                protected async Task<bool> FinancialCarryForwardInternalAsync(Guid engagementId, LevviaCFRequestDto levviaCFRequestDto, Guid requestedBy)
+                protected async Task<bool> ImportDataInternalAsync(Guid projectId, DataImportRequestDto dataImportRequestDto, Guid requestedBy)
                 {
-                    await GetAndCreateManifest(engagementId, levviaCFRequestDto, requestedBy);
-                    await GetManifestFromLevvia(engagementId, levviaCFRequestDto, requestedBy);
+                    await GetAndCreateManifest(projectId, dataImportRequestDto, requestedBy);
+                    await PullManifestFromArchive(projectId, dataImportRequestDto, requestedBy);
                     await UploadFileToBlobAsync();
                     return await ProcessDataAsync();
                 }
 
-                private async Task GetAndCreateManifest(Guid engagementId, LevviaCFRequestDto levviaCFRequestDto, Guid requestedBy)
+                private async Task GetAndCreateManifest(Guid projectId, DataImportRequestDto dataImportRequestDto, Guid requestedBy)
                 {
-                    var existingManifest = await carryForwardLevviaRepo.GetCFManifestAsync(levviaCFRequestDto.TransitionId, engagementId);
+                    var existingManifest = await dataImportRepository.GetImportManifestAsync(dataImportRequestDto.BatchId, projectId);
                     if (existingManifest == null)
                     {
-                        await carryForwardLevviaRepo.SaveCFManifestAsync(new CFManifest());
+                        await dataImportRepository.SaveImportManifestAsync(new ImportManifest());
                     }
                 }
 
-                private async Task GetManifestFromLevvia(Guid engagementId, LevviaCFRequestDto levviaCFRequestDto, Guid requestedBy)
+                private async Task PullManifestFromArchive(Guid projectId, DataImportRequestDto dataImportRequestDto, Guid requestedBy)
                 {
-                    await shardProvider.GetAsync(engagementId);
-                    await levviaSystem.GetManifestFileFromLevvia(levviaCFRequestDto.TransitionId, GetType().Name);
+                    await shardProvider.GetAsync(projectId);
+                    await externalArchiveSystem.GetManifestFileAsync(dataImportRequestDto.BatchId, GetType().Name);
                 }
 
                 private async Task UploadFileToBlobAsync()
                 {
-                    await cortexMigrationDocumentProvider.UploadTBFileToBlob();
+                    await blobDocumentProvider.UploadImportFileToBlob();
                 }
             }
             """);
 
         await File.WriteAllTextAsync(
-            Path.Combine(workspacePath, "CarryForwardLevviaRepo.cs"),
+            Path.Combine(workspacePath, "DataImportRepository.cs"),
             """
             using System.Data;
 
-            public sealed class CarryForwardLevviaRepo : ICarryForwardLevviaRepo
+            public sealed class DataImportRepository : IDataImportRepository
             {
                 private readonly ISqlDatabase database;
 
-                public CarryForwardLevviaRepo(ISqlDatabase database)
+                public DataImportRepository(ISqlDatabase database)
                 {
                     this.database = database;
                 }
 
-                public async Task<CFManifest?> GetCFManifestAsync(Guid transitionId, Guid engagementId)
+                public async Task<ImportManifest?> GetImportManifestAsync(Guid batchId, Guid projectId)
                 {
-                    var sqlCommand = "SELECT [Id] FROM [fin].[CFManifest] WHERE TransitionId = @TransitionId";
-                    return await database.Query<CFManifest>(sqlCommand);
+                    var sqlCommand = "SELECT [Id] FROM [ops].[ImportManifest] WHERE BatchId = @BatchId";
+                    return await database.Query<ImportManifest>(sqlCommand);
                 }
 
-                public async Task SaveCFManifestAsync(CFManifest manifest)
+                public async Task SaveImportManifestAsync(ImportManifest manifest)
                 {
-                    await database.Execute("[fin].[USP_SaveCFManifest]", commandType: CommandType.StoredProcedure);
+                    await database.Execute("[ops].[USP_SaveImportManifest]", commandType: CommandType.StoredProcedure);
                 }
 
-                public async Task SaveFinancialTrialBalanceCarryForward(Guid engagementId, LevviaCFRequestDto dto)
+                public async Task SaveLedgerSnapshotImport(Guid projectId, DataImportRequestDto dto)
                 {
-                    await database.Execute("[fin].[USP_SaveTrialBalanceCarryForward]", commandType: CommandType.StoredProcedure);
+                    await database.Execute("[ops].[USP_SaveLedgerSnapshotImport]", commandType: CommandType.StoredProcedure);
                 }
             }
             """);
@@ -1063,8 +1063,8 @@ public sealed class WorkspaceIndexingServiceTests
         await File.WriteAllTextAsync(
             Path.Combine(workspacePath, "Program.cs"),
             """
-            services.AddKeyedTransient<ICarryForwardLevvia, CarryForwardTrialBalanceLevviaManager>(nameof(CarryForwardTrialBalanceLevviaManager));
-            services.AddSingleton<ICarryForwardLevviaRepo, CarryForwardLevviaRepo>();
+            services.AddKeyedTransient<IDataImportProcessor, LedgerSnapshotImportManager>(nameof(LedgerSnapshotImportManager));
+            services.AddSingleton<IDataImportRepository, DataImportRepository>();
             """);
 
         await File.WriteAllTextAsync(
@@ -1072,41 +1072,41 @@ public sealed class WorkspaceIndexingServiceTests
             """
             using System.Data;
 
-            public interface ICarryForwardLevvia
+            public interface IDataImportProcessor
             {
-                Task<bool> FinancialCarryForwardAsync(Guid engagementId, LevviaCFRequestDto levviaCFRequestDto, Guid requestedBy);
+                Task<bool> ImportDataAsync(Guid projectId, DataImportRequestDto dataImportRequestDto, Guid requestedBy);
             }
 
-            public interface ICarryForwardLevviaRepo
+            public interface IDataImportRepository
             {
-                Task<CFManifest?> GetCFManifestAsync(Guid transitionId, Guid engagementId);
-                Task SaveCFManifestAsync(CFManifest manifest);
-                Task SaveFinancialTrialBalanceCarryForward(Guid engagementId, LevviaCFRequestDto dto);
+                Task<ImportManifest?> GetImportManifestAsync(Guid batchId, Guid projectId);
+                Task SaveImportManifestAsync(ImportManifest manifest);
+                Task SaveLedgerSnapshotImport(Guid projectId, DataImportRequestDto dto);
             }
 
-            public interface ILevviaSystem
+            public interface IExternalArchiveSystem
             {
-                Task GetManifestFileFromLevvia(Guid transitionId, string processName);
+                Task GetManifestFileAsync(Guid batchId, string processName);
             }
 
-            public sealed class LevviaSystem : ILevviaSystem
+            public sealed class ExternalArchiveSystem : IExternalArchiveSystem
             {
-                public Task GetManifestFileFromLevvia(Guid transitionId, string processName) => Task.CompletedTask;
+                public Task GetManifestFileAsync(Guid batchId, string processName) => Task.CompletedTask;
             }
 
             public interface IShardProvider
             {
-                Task GetAsync(Guid engagementId);
+                Task GetAsync(Guid projectId);
             }
 
             public sealed class ShardProvider : IShardProvider
             {
-                public Task GetAsync(Guid engagementId) => Task.CompletedTask;
+                public Task GetAsync(Guid projectId) => Task.CompletedTask;
             }
 
-            public interface ICortexMigrationDocumentProvider
+            public interface IBlobDocumentProvider
             {
-                Task UploadTBFileToBlob();
+                Task UploadImportFileToBlob();
             }
 
             public interface ISqlDatabase
@@ -1115,12 +1115,12 @@ public sealed class WorkspaceIndexingServiceTests
                 Task Execute(string sql, CommandType commandType);
             }
 
-            public sealed class LevviaCFRequestDto
+            public sealed class DataImportRequestDto
             {
-                public Guid TransitionId { get; set; }
+                public Guid BatchId { get; set; }
             }
 
-            public sealed class CFManifest { }
+            public sealed class ImportManifest { }
             """);
 
         var service = CreateService();
@@ -1129,7 +1129,7 @@ public sealed class WorkspaceIndexingServiceTests
         var query = new WorkspaceQueryService();
         var trace = await query.GetCSharpBackendTraceAsync(
             workspacePath,
-            "POST /v4/engagements/{engagementId}/CarryForwardLevvia/FinancialTrialBalanceCarryForward",
+            "POST /v4/projects/{projectId}/DataImport/ImportLedgerSnapshot",
             includeTests: false,
             maxDepth: 40,
             CancellationToken.None);
@@ -1138,26 +1138,26 @@ public sealed class WorkspaceIndexingServiceTests
         var rendered = string.Join('\n', trace!.Steps.Select(x => $"{x.Stage}: {x.Title} | {x.Detail} | {x.Confidence} | {x.Reason}"));
 
         Assert.Contains("Keyed DI handoff", rendered, StringComparison.Ordinal);
-        Assert.Contains("ICarryForwardLevvia resolves to CarryForwardTrialBalanceLevviaManager", rendered, StringComparison.Ordinal);
+        Assert.Contains("IDataImportProcessor resolves to LedgerSnapshotImportManager", rendered, StringComparison.Ordinal);
         Assert.Contains("Base class call", rendered, StringComparison.Ordinal);
         Assert.Contains("GetAndCreateManifest", rendered, StringComparison.Ordinal);
-        Assert.Contains("Reads fin.CFManifest", rendered, StringComparison.Ordinal);
-        Assert.Contains("USP_SaveCFManifest", rendered, StringComparison.Ordinal);
+        Assert.Contains("Reads ops.ImportManifest", rendered, StringComparison.Ordinal);
+        Assert.Contains("USP_SaveImportManifest", rendered, StringComparison.Ordinal);
         Assert.Contains("IShardProvider resolves to ShardProvider", rendered, StringComparison.Ordinal);
-        Assert.Contains("ILevviaSystem resolves to LevviaSystem", rendered, StringComparison.Ordinal);
-        Assert.Contains("GetManifestFileFromLevvia", rendered, StringComparison.Ordinal);
-        Assert.Contains("UploadTBFileToBlob", rendered, StringComparison.Ordinal);
+        Assert.Contains("IExternalArchiveSystem resolves to ExternalArchiveSystem", rendered, StringComparison.Ordinal);
+        Assert.Contains("GetManifestFileAsync", rendered, StringComparison.Ordinal);
+        Assert.Contains("UploadImportFileToBlob", rendered, StringComparison.Ordinal);
         Assert.Contains("Override call", rendered, StringComparison.Ordinal);
-        Assert.Contains("USP_SaveTrialBalanceCarryForward", rendered, StringComparison.Ordinal);
-        Assert.Contains(trace.Steps, x => x.Category == "handoff" && x.Title.Contains("ILevviaSystem resolves", StringComparison.Ordinal));
-        Assert.Contains(trace.Steps, x => x.Category == "data" && x.Title.Contains("USP_SaveCFManifest", StringComparison.Ordinal));
-        Assert.Contains(trace.Steps, x => x.SourceFilePath == "CarryForwardLevviaController.cs"
+        Assert.Contains("USP_SaveLedgerSnapshotImport", rendered, StringComparison.Ordinal);
+        Assert.Contains(trace.Steps, x => x.Category == "handoff" && x.Title.Contains("IExternalArchiveSystem resolves", StringComparison.Ordinal));
+        Assert.Contains(trace.Steps, x => x.Category == "data" && x.Title.Contains("USP_SaveImportManifest", StringComparison.Ordinal));
+        Assert.Contains(trace.Steps, x => x.SourceFilePath == "DataImportController.cs"
             && x.SourceLineNumber is > 0
-            && x.SourcePreview?.Contains("FinancialTrialBalanceCarryForward", StringComparison.Ordinal) == true);
+            && x.SourcePreview?.Contains("ImportLedgerSnapshot", StringComparison.Ordinal) == true);
 
         var shortTrace = await query.GetCSharpBackendTraceAsync(
             workspacePath,
-            "POST /v4/engagements/{engagementId}/CarryForwardLevvia/FinancialTrialBalanceCarryForward",
+            "POST /v4/projects/{projectId}/DataImport/ImportLedgerSnapshot",
             includeTests: false,
             maxDepth: 5,
             CancellationToken.None);
