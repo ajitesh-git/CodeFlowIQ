@@ -94,6 +94,16 @@ export type RepositoryExplorerItem = {
   filePath?: string | null;
   lineNumber?: number | null;
   metadata?: string | null;
+  displayTitle?: string | null;
+  displaySubtitle?: string | null;
+  displayLocator?: string | null;
+  evidenceSummary?: string | null;
+  occurrenceKey?: string | null;
+};
+
+export type RepositoryExplorerRelatedGroup = {
+  label: string;
+  rows: RepositoryExplorerItem[];
 };
 
 export type OverviewSection = "guide" | "technology" | "flow" | "api" | "data" | "azure" | "folder";

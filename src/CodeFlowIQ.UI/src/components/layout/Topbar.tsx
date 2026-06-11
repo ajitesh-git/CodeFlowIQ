@@ -30,20 +30,20 @@ export function Topbar({
     <section className="topbar">
       <form className="connection-form" onSubmit={submitConnection}>
         <label>
-          API ({apiSource})
+          CodeFlowIQ API ({apiSource})
           <input value={apiBaseUrl} onChange={(event) => {
             onApiSourceChange("saved");
             onApiBaseUrlChange(event.target.value);
           }} />
         </label>
-        <button type="submit" className="icon-button" title="Check API">
+        <button type="submit" className="icon-button" title="Check API connection">
           {busy === "Checking API" ? <Loader2 className="spin" size={18} /> : <Server size={18} />}
         </button>
       </form>
 
       <div className={health?.status === "healthy" ? "status-pill ok" : "status-pill"}>
         <ShieldCheck size={16} />
-        {health?.status ?? "offline"}
+        {health?.status === "healthy" ? "API connected" : "API offline"}
       </div>
     </section>
   );

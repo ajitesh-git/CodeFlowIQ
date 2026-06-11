@@ -1,7 +1,9 @@
 .app-shell {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
+  height: 100vh;
   min-height: 100vh;
+  overflow: hidden;
   position: relative;
 }
 
@@ -10,8 +12,12 @@
   color: var(--sidebar-active);
   display: flex;
   flex-direction: column;
+  height: 100vh;
   min-width: 0;
+  overflow: hidden;
   padding: 20px 16px;
+  position: sticky;
+  top: 0;
 }
 
 .brand-block {
@@ -50,6 +56,8 @@
   display: grid;
   gap: 6px;
   margin-top: 28px;
+  overflow-y: auto;
+  padding-bottom: 12px;
 }
 
 .nav-list button {
@@ -78,6 +86,7 @@
 .feature-toggles {
   border-top: 1px solid var(--sidebar-border);
   display: grid;
+  flex-shrink: 0;
   gap: 10px;
   margin-top: auto;
   padding-top: 18px;
@@ -115,7 +124,9 @@
 .main-panel {
   display: grid;
   grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  height: 100vh;
   min-width: 0;
+  overflow: hidden;
 }
 
 .topbar,
@@ -226,4 +237,26 @@
   display: inline-flex;
   gap: 7px;
   font-weight: 700;
+}
+
+@media (max-width: 920px) {
+  .app-shell {
+    height: auto;
+    overflow: visible;
+  }
+
+  .sidebar {
+    height: auto;
+    overflow: visible;
+    position: static;
+  }
+
+  .nav-list {
+    overflow: visible;
+  }
+
+  .main-panel {
+    height: auto;
+    overflow: visible;
+  }
 }

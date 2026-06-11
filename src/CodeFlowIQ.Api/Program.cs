@@ -66,6 +66,7 @@ app.MapGet("/", () => Results.Ok(new
         "/api/apis",
         "/api/azure",
         "/api/explorer",
+        "/api/explorer/related",
         "/api/flows",
         "/api/chains",
         "/api/backend"
@@ -210,6 +211,16 @@ api.MapGet("/explorer", async (
     CancellationToken cancellationToken) =>
     Results.Ok(await queryService.ListRepositoryExplorerItemsAsync(path, surface, q, selectedItemId, includeTests == true, NormalizeTake(take, 200), cancellationToken)));
 
+api.MapGet("/explorer/related", async (
+    string path,
+    string surface,
+    string itemId,
+    bool? includeTests,
+    int? take,
+    IWorkspaceQueryService queryService,
+    CancellationToken cancellationToken) =>
+    Results.Ok(await queryService.ListRepositoryExplorerRelatedItemsAsync(path, surface, itemId, includeTests == true, NormalizeTake(take, 6), cancellationToken)));
+
 api.MapGet("/flows", async (
     string path,
     string? api,
@@ -272,7 +283,7 @@ app.Lifetime.ApplicationStarted.Register(() => LocalRuntimeHost.TryWriteRuntimeF
 app.Run();
 
 static int NormalizeTake(int? value, int defaultValue) =>
-    value is > 0 and <= 1000 ? value.Value : defaultValue;
+    value is > 0 and <= 10000 ? value.Value : defaultValue;
 
 public sealed record WorkspacePathRequest(string Path);
 

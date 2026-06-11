@@ -498,12 +498,103 @@ public sealed class WorkspaceIndexingServiceTests
         Assert.Single(treeChains);
         Assert.Contains(Environment.NewLine, treeChains[0], StringComparison.Ordinal);
         Assert.Contains("resolved_to -> symbol:UserRegistrationService.cs::RegisterAsync", treeChains[0], StringComparison.Ordinal);
+        Assert.Contains("matches_backend_handler -> symbol:AuthController.cs::Register\trelationship:", treeChains[0], StringComparison.Ordinal);
+        Assert.Contains("writes_table -> database-table:dbo.Users\trelationship:", treeChains[0], StringComparison.Ordinal);
 
         var jsonChains = await query.ListFlowChainsAsync(workspacePath, "register", null, "dbo.Users", "json", false, 8, 1, CancellationToken.None);
         Assert.Single(jsonChains);
         Assert.Contains("\"nodes\"", jsonChains[0], StringComparison.Ordinal);
         Assert.Contains("\"edges\"", jsonChains[0], StringComparison.Ordinal);
         Assert.Contains("\"relationship\":\"writes_table\"", jsonChains[0], StringComparison.Ordinal);
+        Assert.Contains("\"evidenceItemId\":\"relationship:", jsonChains[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RepositoryExplorerRelatedItems_ReturnsBackendBackedContextForSelectedApiRow()
+    {
+        var workspacePath = Path.Combine(Path.GetTempPath(), "codeflowiq-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workspacePath);
+
+        await CreateRepositoryExplorerRelatedSampleAsync(workspacePath);
+
+        var service = CreateService();
+        await service.InitializeAsync(workspacePath, CancellationToken.None);
+
+        var query = new WorkspaceQueryService();
+        var apiRows = await query.ListRepositoryExplorerItemsAsync(workspacePath, "apis", "register", null, false, 10, CancellationToken.None);
+        var selectedApi = Assert.Single(apiRows, x => x.RelationshipKind == "handles_api");
+
+        Assert.Contains("register", selectedApi.DisplayTitle, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Handled by", selectedApi.DisplaySubtitle, StringComparison.Ordinal);
+        Assert.Contains("Evidence #", selectedApi.DisplayLocator, StringComparison.Ordinal);
+        Assert.Contains("handles api", selectedApi.EvidenceSummary, StringComparison.Ordinal);
+        Assert.Contains("apis|", selectedApi.OccurrenceKey, StringComparison.Ordinal);
+
+        var related = await query.ListRepositoryExplorerRelatedItemsAsync(workspacePath, selectedApi.Surface, selectedApi.Id, false, 6, CancellationToken.None);
+
+        Assert.Contains(related, x => x.Label == "Outgoing from this evidence");
+        Assert.Contains(related, x => x.Label == "Incoming to this evidence");
+        Assert.Contains(related, x => x.Label == "Same file or source area");
+
+        var relatedRows = related.SelectMany(x => x.Rows).ToList();
+        Assert.All(relatedRows, x => Assert.NotEqual(selectedApi.Id, x.Id));
+        Assert.All(relatedRows, x => Assert.False(string.IsNullOrWhiteSpace(x.DisplayTitle)));
+        Assert.All(relatedRows, x => Assert.False(string.IsNullOrWhiteSpace(x.DisplaySubtitle)));
+        Assert.All(relatedRows, x => Assert.False(string.IsNullOrWhiteSpace(x.DisplayLocator)));
+        Assert.All(relatedRows, x => Assert.False(string.IsNullOrWhiteSpace(x.EvidenceSummary)));
+        Assert.All(relatedRows, x => Assert.False(string.IsNullOrWhiteSpace(x.OccurrenceKey)));
+        Assert.Contains(relatedRows, x => x.Surface == "backend" && x.RelationshipKind == "calls_method" && x.TargetIdentifier == "IUserRegistrationService.RegisterAsync");
+        Assert.Contains(relatedRows, x => x.Surface == "backend" && x.RelationshipKind == "matches_backend_handler" && x.SourceIdentifier == "register.component.ts::register");
+        Assert.Contains(relatedRows, x => x.Surface == "backend" && x.RelationshipKind == "calls_api" && x.TargetIdentifier == "POST /api/register");
+        Assert.Contains(relatedRows, x => x.Surface == "backend" && x.RelationshipKind == "contains_symbol" && x.SourceIdentifier == "AuthController.cs");
+    }
+
+    [Fact]
+    public async Task PreviewRows_IncludeStableRepositoryExplorerEvidenceIds()
+    {
+        var workspacePath = Path.Combine(Path.GetTempPath(), "codeflowiq-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workspacePath);
+
+        await CreateRepositoryExplorerRelatedSampleAsync(workspacePath);
+
+        var service = CreateService();
+        await service.InitializeAsync(workspacePath, CancellationToken.None);
+
+        var query = new WorkspaceQueryService();
+        var files = await query.ListFilesAsync(workspacePath, null, null, 10, CancellationToken.None);
+        var apis = await query.ListApisAsync(workspacePath, "POST", "register", "Auth", false, 10, CancellationToken.None);
+        var backend = await query.SearchRelationshipsAsync(workspacePath, null, "calls_method", null, "IUserRegistrationService", false, 10, CancellationToken.None);
+
+        Assert.NotEmpty(files);
+        Assert.Single(apis);
+        Assert.NotEmpty(backend);
+        AssertStableEvidenceId("file:", files[0]);
+        AssertStableEvidenceId("relationship:", apis[0]);
+        AssertStableEvidenceId("relationship:", backend[0]);
+    }
+
+    [Fact]
+    public async Task RepositoryExplorerItems_HydrateExactSelectedEvidenceOutsideCurrentPage()
+    {
+        var workspacePath = Path.Combine(Path.GetTempPath(), "codeflowiq-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workspacePath);
+
+        await CreateRepositoryExplorerRelatedSampleAsync(workspacePath);
+
+        var service = CreateService();
+        await service.InitializeAsync(workspacePath, CancellationToken.None);
+
+        await using var db = await WorkspaceDatabase.OpenMigratedAsync(workspacePath, CancellationToken.None);
+        var selectedRelationship = await db.CodeRelationships
+            .Where(x => x.RelationshipKind == "writes_table")
+            .SingleAsync(CancellationToken.None);
+        var selectedItemId = $"relationship:{selectedRelationship.Id}";
+
+        var query = new WorkspaceQueryService();
+        var explorerRows = await query.ListRepositoryExplorerItemsAsync(workspacePath, "backend", "", selectedItemId, false, 1, CancellationToken.None);
+
+        Assert.Contains(explorerRows, x => x.Id == selectedItemId);
+        Assert.Equal(selectedRelationship.TargetIdentifier, explorerRows.Single(x => x.Id == selectedItemId).TargetIdentifier);
     }
 
     [Fact]
@@ -583,8 +674,10 @@ public sealed class WorkspaceIndexingServiceTests
 
         Assert.Single(apis);
         Assert.Contains("POST /api/AccountSetup/save", apis[0], StringComparison.Ordinal);
+        AssertStableEvidenceId("relationship:", apis[0]);
         Assert.Single(azure);
         Assert.DoesNotContain("Tests", azure[0], StringComparison.OrdinalIgnoreCase);
+        AssertStableEvidenceId("relationship:", azure[0]);
         Assert.NotNull(summary);
         Assert.DoesNotContain(summary!.LanguageCounts, x => x.Contains("Sample.Tests", StringComparison.OrdinalIgnoreCase));
     }
@@ -791,4 +884,106 @@ public sealed class WorkspaceIndexingServiceTests
             new LanguageDetector(),
             [new CSharpLanguageAnalyzer(), new SqlLanguageAnalyzer(), new JavaScriptTypeScriptLanguageAnalyzer(), new AngularTemplateLanguageAnalyzer()],
             new IndexingOptions());
+
+    private static void AssertStableEvidenceId(string prefix, string row)
+    {
+        var evidenceId = row
+            .Split('\t', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Last();
+
+        Assert.StartsWith(prefix, evidenceId, StringComparison.Ordinal);
+        Assert.True(int.TryParse(evidenceId[prefix.Length..], out _), $"Expected numeric evidence id in row: {row}");
+    }
+
+    private static async Task CreateRepositoryExplorerRelatedSampleAsync(string workspacePath)
+    {
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "register.component.ts"),
+            """
+            export class RegisterComponent {
+                register() {
+                    this.http.post('/api/register', {});
+                }
+            }
+            """);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "AuthController.cs"),
+            """
+            using Microsoft.AspNetCore.Mvc;
+
+            [Route("api")]
+            public sealed class AuthController : ControllerBase
+            {
+                private readonly IUserRegistrationService _registrationService;
+
+                public AuthController(IUserRegistrationService registrationService)
+                {
+                    _registrationService = registrationService;
+                }
+
+                [HttpPost("register")]
+                public IActionResult Register()
+                {
+                    _registrationService.RegisterAsync();
+                    return Ok();
+                }
+            }
+            """);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "UserRegistrationService.cs"),
+            """
+            public sealed class UserRegistrationService : IUserRegistrationService
+            {
+                private readonly IUserRepository _userRepository;
+
+                public UserRegistrationService(IUserRepository userRepository)
+                {
+                    _userRepository = userRepository;
+                }
+
+                public void RegisterAsync()
+                {
+                    _userRepository.CreateAsync();
+                }
+            }
+            """);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "UserRepository.cs"),
+            """
+            public sealed class UserRepository : IUserRepository
+            {
+                private readonly AppDbContext _dbContext;
+
+                public UserRepository(AppDbContext dbContext)
+                {
+                    _dbContext = dbContext;
+                }
+
+                public void CreateAsync()
+                {
+                    _dbContext.Database.ExecuteSqlRaw("EXEC dbo.RegisterUser @Name");
+                }
+            }
+            """);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "Program.cs"),
+            """
+            services.AddScoped<IUserRegistrationService, UserRegistrationService>();
+            services.AddScoped<IUserRepository, UserRepository>();
+            """);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(workspacePath, "RegisterUser.sql"),
+            """
+            CREATE PROCEDURE dbo.RegisterUser
+            AS
+            BEGIN
+                INSERT INTO dbo.Users (Name) VALUES ('Ada');
+            END
+            """);
+    }
 }

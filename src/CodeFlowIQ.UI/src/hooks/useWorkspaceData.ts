@@ -4,19 +4,22 @@ import { createWorkspaceApi } from "../services/workspaceApi";
 import type {
   ApiHealth,
   OverviewSection,
+  RepositoryExplorerRelatedGroup,
   RepositoryOverview,
   RepositoryOverviewItem,
   RuntimeFlowMap,
   WorkspaceSummary
 } from "../types";
 import type { AppPanel, OverviewNavigation } from "../features/overview";
-import type { RepositoryExplorerRows, RepositoryExplorerSurface } from "../features/repository-explorer";
+import type { ExplorerDrillTarget, RepositoryExplorerRows, RepositoryExplorerSurface } from "../features/repository-explorer";
 import { getOverviewItemNavigation, getOverviewSectionNavigation } from "../features/overview/overviewRouting";
 
 const defaultRuntimeConnection = getDefaultRuntimeConnection();
 const defaultWorkspacePath = localStorage.getItem("codeflowiq.workspacePath") ?? "";
 type ThemeMode = "light" | "dark";
 const defaultTheme = (localStorage.getItem("codeflowiq.theme") === "dark" ? "dark" : "light") satisfies ThemeMode;
+const defaultChainLimit = 1000;
+const defaultApiRouteLimit = 1000;
 const emptyRepositoryExplorerRows: RepositoryExplorerRows = {
   files: [],
   apis: [],
@@ -33,8 +36,8 @@ export function useWorkspaceData() {
   const [overview, setOverview] = useState<RepositoryOverview | null>(null);
   const [runtimeMap, setRuntimeMap] = useState<RuntimeFlowMap | null>(null);
   const [summary, setSummary] = useState<WorkspaceSummary | null>(null);
-  const [apiFilter, setApiFilter] = useState("accountsetup");
-  const [targetFilter, setTargetFilter] = useState("TrialBalance");
+  const [apiFilter, setApiFilter] = useState("");
+  const [targetFilter, setTargetFilter] = useState("");
   const [chains, setChains] = useState<string[]>([]);
   const [backendRows, setBackendRows] = useState<string[]>([]);
   const [apiRows, setApiRows] = useState<string[]>([]);
@@ -43,12 +46,13 @@ export function useWorkspaceData() {
   const [repositoryExplorerSurface, setRepositoryExplorerSurface] = useState<RepositoryExplorerSurface>("files");
   const [repositoryExplorerQuery, setRepositoryExplorerQuery] = useState("");
   const [repositoryExplorerSelectedItemId, setRepositoryExplorerSelectedItemId] = useState<string | null>(null);
+  const [repositoryExplorerOrigin, setRepositoryExplorerOrigin] = useState("Browse evidence");
   const [repositoryExplorerRows, setRepositoryExplorerRows] =
     useState<RepositoryExplorerRows>(emptyRepositoryExplorerRows);
   const [azureFilter, setAzureFilter] = useState("");
   const [fileLanguageFilter, setFileLanguageFilter] = useState("");
   const [fileFolderFilter, setFileFolderFilter] = useState("");
-  const [chainLimit, setChainLimit] = useState(8);
+  const [chainLimit, setChainLimit] = useState(defaultChainLimit);
   const [activePanel, setActivePanel] = useState<AppPanel>("overview");
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string>("Ready");
@@ -99,10 +103,7 @@ export function useWorkspaceData() {
     const result = await runTask("Indexing workspace", () => api.initializeWorkspace(path));
     if (result) {
       localStorage.setItem("codeflowiq.workspacePath", path);
-      await loadSummary();
-      await loadOverview();
-      await loadRuntimeMap();
-      await loadChains();
+      await loadWorkspacePanels();
     }
   }
 
@@ -111,9 +112,7 @@ export function useWorkspaceData() {
     const result = await runTask("Syncing workspace", () => api.syncWorkspace(path));
     if (result) {
       localStorage.setItem("codeflowiq.workspacePath", path);
-      await loadSummary();
-      await loadOverview();
-      await loadRuntimeMap();
+      await loadWorkspacePanels();
     }
   }
 
@@ -202,7 +201,12 @@ export function useWorkspaceData() {
     }
   }
 
-  function openRepositoryExplorer(surface: RepositoryExplorerSurface, query = "", selectedItemId: string | null = null) {
+  function openRepositoryExplorer(
+    surface: RepositoryExplorerSurface,
+    query = "",
+    selectedItemId: string | null = null,
+    originLabel = "Browse evidence"
+  ) {
     if (!canQueryWorkspace) {
       return;
     }
@@ -210,11 +214,21 @@ export function useWorkspaceData() {
     setRepositoryExplorerSurface(surface);
     setRepositoryExplorerQuery(query);
     setRepositoryExplorerSelectedItemId(selectedItemId);
+    setRepositoryExplorerOrigin(originLabel);
     setActivePanel("explorer");
     if (repositoryExplorerRows[surface].length === 0
       || (selectedItemId && !repositoryExplorerRows[surface].some((row) => row.id === selectedItemId))) {
       void loadRepositoryExplorerSurface(surface, selectedItemId);
     }
+  }
+
+  function openExplorerTarget(target: ExplorerDrillTarget, fallbackOriginLabel = "Preview") {
+    openRepositoryExplorer(
+      target.surface,
+      target.query,
+      target.selectedItemId ?? null,
+      target.originLabel ?? fallbackOriginLabel
+    );
   }
 
   function changeRepositoryExplorerSurface(surface: RepositoryExplorerSurface) {
@@ -227,10 +241,23 @@ export function useWorkspaceData() {
     return api.loadExplorerItems(workspacePath, surface, "", 1000, selectedItemId);
   }
 
+  function loadRepositoryExplorerRelatedEvidence(surface: RepositoryExplorerSurface, itemId: string): Promise<RepositoryExplorerRelatedGroup[]> {
+    if (!canQueryWorkspace) {
+      return Promise.resolve([]);
+    }
+
+    return api.loadExplorerRelatedItems(workspacePath, surface, itemId, 6);
+  }
+
   async function loadWorkspacePanels() {
+    setApiFilter("");
+    setTargetFilter("");
+    setChainLimit(defaultChainLimit);
     await loadSummary();
     await loadOverview();
     await loadRuntimeMap();
+    await loadChains("", "", defaultChainLimit);
+    await loadApiRows("", defaultApiRouteLimit);
   }
 
   function openOverviewItem(section: OverviewSection, item: RepositoryOverviewItem) {
@@ -251,7 +278,7 @@ export function useWorkspaceData() {
 
   function applyOverviewNavigation(navigation: OverviewNavigation) {
     if (navigation.panel === "explorer") {
-      openRepositoryExplorer(navigation.surface, navigation.query);
+      openRepositoryExplorer(navigation.surface, navigation.query, null, "Start here");
       return;
     }
 
@@ -295,11 +322,20 @@ export function useWorkspaceData() {
 
   function openPanel(panel: AppPanel) {
     setActivePanel(panel);
+    if (panel === "explorer") {
+      setRepositoryExplorerOrigin("Browse evidence");
+    }
     if (panel === "overview" && !overview && canQueryWorkspace) {
       void loadOverview();
     }
     if (panel === "runtime" && !runtimeMap && canQueryWorkspace) {
       void loadRuntimeMap();
+    }
+    if (panel === "chains" && chains.length === 0 && canQueryWorkspace) {
+      setApiFilter("");
+      setTargetFilter("");
+      setChainLimit(defaultChainLimit);
+      void loadChains("", "", defaultChainLimit);
     }
     if (panel === "explorer" && repositoryExplorerRows[repositoryExplorerSurface].length === 0 && canQueryWorkspace) {
       void loadRepositoryExplorerSurface(repositoryExplorerSurface);
@@ -308,7 +344,7 @@ export function useWorkspaceData() {
       void loadBackendRows();
     }
     if (panel === "apis" && apiRows.length === 0 && canQueryWorkspace) {
-      void loadApiRows();
+      void loadApiRows("", defaultApiRouteLimit);
     }
     if (panel === "azure" && azureRows.length === 0 && canQueryWorkspace) {
       void loadAzureRows();
@@ -336,6 +372,7 @@ export function useWorkspaceData() {
     repositoryExplorerSurface,
     repositoryExplorerQuery,
     repositoryExplorerSelectedItemId,
+    repositoryExplorerOrigin,
     repositoryExplorerRows,
     azureFilter,
     fileLanguageFilter,
@@ -371,7 +408,9 @@ export function useWorkspaceData() {
     loadFileRows,
     loadRepositoryExplorerSurface,
     loadRepositoryExplorerAll,
+    loadRepositoryExplorerRelatedEvidence,
     openRepositoryExplorer,
+    openExplorerTarget,
     openOverviewItem,
     browseOverviewSection,
     openPanel

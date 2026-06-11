@@ -325,11 +325,13 @@ input {
   }
 
   .nav-list {
-    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   }
 
   .nav-list button {
-    justify-content: center;
+    justify-content: flex-start;
+    min-height: 42px;
+    white-space: normal;
   }
 
   .feature-toggles {

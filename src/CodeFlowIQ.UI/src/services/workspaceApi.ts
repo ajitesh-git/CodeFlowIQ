@@ -1,4 +1,4 @@
-import type { ApiHealth, RepositoryExplorerItem, RepositoryOverview, RuntimeFlowMap, WorkspaceSummary } from "../types";
+import type { ApiHealth, RepositoryExplorerItem, RepositoryExplorerRelatedGroup, RepositoryOverview, RuntimeFlowMap, WorkspaceSummary } from "../types";
 
 type WorkspaceApiClient = {
   checkHealth: () => Promise<ApiHealth>;
@@ -13,6 +13,7 @@ type WorkspaceApiClient = {
   loadAzureRows: (workspacePath: string, service: string, take: number) => Promise<string[]>;
   loadFileRows: (workspacePath: string, language: string, folder: string, take: number) => Promise<string[]>;
   loadExplorerItems: (workspacePath: string, surface: string, query: string, take: number, selectedItemId?: string | null) => Promise<RepositoryExplorerItem[]>;
+  loadExplorerRelatedItems: (workspacePath: string, surface: string, itemId: string, take: number) => Promise<RepositoryExplorerRelatedGroup[]>;
 };
 
 export function createWorkspaceApi(baseUrl: string): WorkspaceApiClient {
@@ -53,7 +54,9 @@ export function createWorkspaceApi(baseUrl: string): WorkspaceApiClient {
     loadFileRows: (workspacePath, language, folder, take) =>
       request<string[]>(`/api/files?path=${encode(workspacePath)}&language=${encode(language)}&folder=${encode(folder)}&take=${take}`),
     loadExplorerItems: (workspacePath, surface, query, take, selectedItemId) =>
-      request<RepositoryExplorerItem[]>(`/api/explorer?path=${encode(workspacePath)}&surface=${encode(surface)}&q=${encode(query)}&selectedItemId=${encode(selectedItemId ?? "")}&take=${take}`)
+      request<RepositoryExplorerItem[]>(`/api/explorer?path=${encode(workspacePath)}&surface=${encode(surface)}&q=${encode(query)}&selectedItemId=${encode(selectedItemId ?? "")}&take=${take}`),
+    loadExplorerRelatedItems: (workspacePath, surface, itemId, take) =>
+      request<RepositoryExplorerRelatedGroup[]>(`/api/explorer/related?path=${encode(workspacePath)}&surface=${encode(surface)}&itemId=${encode(itemId)}&take=${take}`)
   };
 }
 

@@ -108,7 +108,7 @@ public sealed class FlowChainQueryHandler
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var seed = new FlowStep(start.SourceKind, start.SourceIdentifier, start.RelationshipKind, start.TargetKind, start.TargetIdentifier);
+            var seed = new FlowStep(start.SourceKind, start.SourceIdentifier, start.RelationshipKind, start.TargetKind, start.TargetIdentifier, start.Id);
             foreach (var chain in graph.Expand(seed, maxDepth))
             {
                 var searchable = FormatFlowChain(chain, "compact");
@@ -178,7 +178,7 @@ public sealed class FlowChainQueryHandler
                 depth++;
             }
 
-            lines.Add($"{new string(' ', depth * 2)}{step.RelationshipKind} -> {FormatNode(step.TargetKind, step.TargetIdentifier)}");
+            lines.Add($"{new string(' ', depth * 2)}{step.RelationshipKind} -> {FormatNode(step.TargetKind, step.TargetIdentifier)}{FormatEvidenceSuffix(step.RelationshipId)}");
             previousTargetIdentifier = step.TargetIdentifier;
             depth++;
         }
@@ -220,7 +220,8 @@ public sealed class FlowChainQueryHandler
             {
                 relationship = step.RelationshipKind,
                 source = step.SourceIdentifier,
-                target = step.TargetIdentifier
+                target = step.TargetIdentifier,
+                evidenceItemId = step.RelationshipId is null ? null : $"relationship:{step.RelationshipId}"
             });
             nodes.Add(new
             {
@@ -243,6 +244,9 @@ public sealed class FlowChainQueryHandler
 
     private static string FormatNode(string kind, string identifier) => $"{kind}:{identifier}";
 
+    private static string FormatEvidenceSuffix(int? relationshipId) =>
+        relationshipId is null ? string.Empty : $"\trelationship:{relationshipId}";
+
     private sealed record RuntimeFile(string RelativePath, string LanguageId);
 
     private sealed record FlowStep(
@@ -250,7 +254,8 @@ public sealed class FlowChainQueryHandler
         string SourceIdentifier,
         string RelationshipKind,
         string TargetKind,
-        string TargetIdentifier);
+        string TargetIdentifier,
+        int? RelationshipId);
 
     private sealed class FlowGraph
     {
@@ -462,7 +467,8 @@ public sealed class FlowChainQueryHandler
                 relationship.SourceIdentifier,
                 relationship.RelationshipKind,
                 relationship.TargetKind,
-                relationship.TargetIdentifier);
+                relationship.TargetIdentifier,
+                relationship.Id);
 
         private static string? GetCallableReceiverName(string identifier)
         {

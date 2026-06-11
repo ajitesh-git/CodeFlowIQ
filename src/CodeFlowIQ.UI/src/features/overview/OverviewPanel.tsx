@@ -24,7 +24,7 @@ export function OverviewPanel({
         <div>
           <BookOpen size={24} />
           <h2>Start with a guided repository tour</h2>
-          <p>Load an indexed workspace to see the main technologies, suggested learning path, detected flows, APIs, data touchpoints, Azure services, and important folders.</p>
+          <p>Load an indexed workspace to get a beginner-friendly tour: what the repo is built with, where to start reading, which APIs matter, and where data or cloud services appear.</p>
         </div>
         <button onClick={onLoad} disabled={disabled}>
           <Compass size={17} /> Build overview
@@ -48,7 +48,7 @@ export function OverviewPanel({
 
       <section className="learning-path">
         <div className="section-heading">
-          <h3>Suggested Learning Path</h3>
+          <h3>Where should I start reading?</h3>
           <span>{overview.suggestedStartingPoints.length} steps</span>
         </div>
         <ol>
@@ -68,12 +68,12 @@ export function OverviewPanel({
       </section>
 
       <div className="overview-grid">
-        <OverviewList title="Technologies" section="technology" rows={overview.technologySignals} onOpenItem={onOpenItem} onBrowseSection={onBrowseSection} />
-        <OverviewList title="Detected Flows" section="flow" rows={overview.detectedFlows} onOpenItem={onOpenItem} onBrowseSection={onBrowseSection} />
-        <OverviewList title="Important APIs" section="api" rows={overview.importantApis} onOpenItem={onOpenItem} onBrowseSection={onBrowseSection} />
-        <OverviewList title="Data Touchpoints" section="data" rows={overview.dataTouchpoints} onOpenItem={onOpenItem} onBrowseSection={onBrowseSection} />
-        <OverviewList title="Azure Dependencies" section="azure" rows={overview.azureDependencies} onOpenItem={onOpenItem} onBrowseSection={onBrowseSection} />
-        <OverviewList title="Important Folders" section="folder" rows={overview.importantFolders} onOpenItem={onOpenItem} onBrowseSection={onBrowseSection} />
+        <OverviewList title="What technologies are used?" section="technology" rows={overview.technologySignals} onOpenItem={onOpenItem} onBrowseSection={onBrowseSection} />
+        <OverviewList title="What flows were found?" section="flow" rows={overview.detectedFlows} onOpenItem={onOpenItem} onBrowseSection={onBrowseSection} />
+        <OverviewList title="Which APIs matter?" section="api" rows={overview.importantApis} onOpenItem={onOpenItem} onBrowseSection={onBrowseSection} />
+        <OverviewList title="Where does data appear?" section="data" rows={overview.dataTouchpoints} onOpenItem={onOpenItem} onBrowseSection={onBrowseSection} />
+        <OverviewList title="What cloud services are used?" section="azure" rows={overview.azureDependencies} onOpenItem={onOpenItem} onBrowseSection={onBrowseSection} />
+        <OverviewList title="Which folders look important?" section="folder" rows={overview.importantFolders} onOpenItem={onOpenItem} onBrowseSection={onBrowseSection} />
       </div>
     </div>
   );
@@ -100,7 +100,7 @@ function OverviewList({
       </div>
       <div>
         {rows.length === 0 ? (
-          <EmptyState label="No items detected" />
+          <EmptyState label="Nothing detected here yet" />
         ) : (
           rows.map((row) => (
             <button className="overview-drill-card" key={`${title}-${row.title}-${row.detail}`} onClick={() => onOpenItem(section, row)}>
@@ -111,7 +111,7 @@ function OverviewList({
         )}
       </div>
       <button className="browse-section-button" onClick={() => onBrowseSection(section)}>
-        <Search size={16} /> Browse all
+        <Search size={16} /> Browse full evidence
       </button>
     </section>
   );

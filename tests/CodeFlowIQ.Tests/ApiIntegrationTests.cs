@@ -160,6 +160,7 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
         Assert.Contains("matches_backend_handler -> symbol:AuthController.cs::Register", chains[0], StringComparison.Ordinal);
         Assert.Contains("executes_procedure -> procedure:dbo.RegisterUser", chains[0], StringComparison.Ordinal);
         Assert.Contains("writes_table -> database-table:dbo.Users", chains[0], StringComparison.Ordinal);
+        Assert.Contains("\trelationship:", chains[0], StringComparison.Ordinal);
 
         var overview = await client.GetFromJsonAsync<JsonElement>($"/api/overview?path={encodedPath}&take=5");
         Assert.Contains("PlainDirectory", overview.GetProperty("kind").GetString(), StringComparison.Ordinal);
@@ -173,6 +174,22 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
         Assert.NotEmpty(runtimeMap.GetProperty("executionPaths").EnumerateArray());
         Assert.NotEmpty(runtimeMap.GetProperty("flows").EnumerateArray());
         Assert.Contains("Register", runtimeMap.GetProperty("flows")[0].GetProperty("title").GetString(), StringComparison.OrdinalIgnoreCase);
+
+        var explorerRows = await client.GetFromJsonAsync<JsonElement>($"/api/explorer?path={encodedPath}&surface=apis&q=register&take=5");
+        var selectedExplorerRow = explorerRows.EnumerateArray().Single(x => x.GetProperty("relationshipKind").GetString() == "handles_api");
+        var selectedItemId = Uri.EscapeDataString(selectedExplorerRow.GetProperty("id").GetString()!);
+
+        var relatedRows = await client.GetFromJsonAsync<JsonElement>($"/api/explorer/related?path={encodedPath}&surface=apis&itemId={selectedItemId}&take=6");
+        var relatedGroups = relatedRows.EnumerateArray().ToList();
+        Assert.Contains(relatedGroups, x => x.GetProperty("label").GetString() == "Outgoing from this evidence");
+        Assert.Contains(relatedGroups, x => x.GetProperty("label").GetString() == "Incoming to this evidence");
+
+        var flattenedRelatedRows = relatedGroups
+            .SelectMany(x => x.GetProperty("rows").EnumerateArray())
+            .ToList();
+        Assert.Contains(flattenedRelatedRows, x => x.GetProperty("relationshipKind").GetString() == "matches_backend_handler");
+        Assert.Contains(flattenedRelatedRows, x => x.GetProperty("relationshipKind").GetString() == "calls_method");
+        Assert.Contains(flattenedRelatedRows, x => x.GetProperty("relationshipKind").GetString() == "contains_symbol");
     }
 
     private static async Task CreateChainSampleWorkspaceAsync(string workspacePath)

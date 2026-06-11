@@ -25,6 +25,20 @@ export function RuntimeMapPanel({ runtimeMap, disabled, onLoad, onOpenExplorer }
 
   useEffect(() => {
     if (!runtimeMap) {
+      setSelectedPathIndex(0);
+      setSelectedFlowIndex(0);
+      setActiveRuntimeView("recommended");
+      return;
+    }
+
+    const firstReadableStoryIndex = runtimeMap.executionPaths.findIndex((path) => !isDetectedOnlyExecutionPath(path));
+    setSelectedPathIndex(firstReadableStoryIndex >= 0 ? firstReadableStoryIndex : 0);
+    setSelectedFlowIndex(0);
+    setActiveRuntimeView("recommended");
+  }, [runtimeMap]);
+
+  useEffect(() => {
+    if (!runtimeMap) {
       if (selectedPathIndex !== 0) {
         setSelectedPathIndex(0);
       }
@@ -50,7 +64,7 @@ export function RuntimeMapPanel({ runtimeMap, disabled, onLoad, onOpenExplorer }
         <div>
           <Play size={24} />
           <h2>Map how this repository runs</h2>
-          <p>Build a runtime map to identify likely startup files, user/API entry points, backend handlers, data access, and cloud dependencies from the local index.</p>
+          <p>Build a runtime map to see the application story: where execution starts, which APIs or handlers run, and whether the flow reaches data or cloud services.</p>
         </div>
         <button onClick={onLoad} disabled={disabled}>
           <Network size={17} /> Build runtime map
@@ -114,9 +128,9 @@ export function RuntimeMapPanel({ runtimeMap, disabled, onLoad, onOpenExplorer }
           <p>{runtimeMap.summary}</p>
         </div>
         <div className="runtime-hero-metrics">
-          <Metric label="Start Points" value={totalEntryCount} />
-          <Metric label="Flow Paths" value={runtimeMap.flows.length} />
-          <Metric label="Selected Steps" value={selectedStepCount} />
+          <Metric label="Ways in" value={totalEntryCount} />
+          <Metric label="Stories found" value={runtimeMap.flows.length} />
+          <Metric label="Steps selected" value={selectedStepCount} />
         </div>
         <button onClick={onLoad} disabled={disabled}>
           <RefreshCw size={17} /> Refresh
@@ -125,13 +139,13 @@ export function RuntimeMapPanel({ runtimeMap, disabled, onLoad, onOpenExplorer }
 
       <nav className="runtime-view-nav" aria-label="Runtime Map sections">
         <button className={activeRuntimeView === "recommended" ? "active" : ""} onClick={() => setActiveRuntimeView("recommended")}>
-          <Compass size={16} /> Recommended
+          <Compass size={16} /> Best starting stories
         </button>
         <button className={activeRuntimeView === "starts" ? "active" : ""} onClick={() => setActiveRuntimeView("starts")}>
-          <FolderTree size={16} /> All Start Points
+          <FolderTree size={16} /> All ways in
         </button>
         <button className={activeRuntimeView === "flows" ? "active" : ""} disabled={indexedFlows.length === 0} onClick={() => setActiveRuntimeView("flows")}>
-          <Network size={16} /> All Flows
+          <Network size={16} /> All stories
         </button>
         <button className={activeRuntimeView === "evidence" ? "active" : ""} disabled={selectedFlow === null} onClick={() => setActiveRuntimeView("evidence")}>
           <BookOpen size={16} /> Evidence
@@ -144,11 +158,11 @@ export function RuntimeMapPanel({ runtimeMap, disabled, onLoad, onOpenExplorer }
         <section className="runtime-recommended-view">
           <div className="runtime-page-heading">
             <div>
-              <h3>Recommended Runtime Stories</h3>
-              <p>Curated connected paths first. Use All Start Points or All Flows when you need complete repository coverage.</p>
+              <h3>Best starting stories</h3>
+              <p>Start with the clearest connected paths. These are the easiest flows for a new developer to read first.</p>
             </div>
             <button onClick={() => onOpenExplorer("files", "")}>
-              <FolderTree size={16} /> Browse all evidence
+              <FolderTree size={16} /> Browse source evidence
             </button>
           </div>
 
@@ -193,7 +207,7 @@ export function RuntimeMapPanel({ runtimeMap, disabled, onLoad, onOpenExplorer }
           <div className="runtime-page-heading">
             <div>
               <h3>All Start Points</h3>
-              <p>Search and group every detected runtime start point without expanding all flows at once.</p>
+              <p>Every place CodeFlowIQ thinks the application can begin running. Pick one to see its story without loading everything at once.</p>
             </div>
             <span>{filteredRunnablePathIndexes.length + filteredDetectedOnlyPathIndexes.length} shown</span>
           </div>
@@ -201,7 +215,7 @@ export function RuntimeMapPanel({ runtimeMap, disabled, onLoad, onOpenExplorer }
           <div className="runtime-browser-toolbar">
             <label>
               Search start points
-              <input value={startSearch} onChange={(event) => setStartSearch(event.target.value)} placeholder="Search title, path, category" />
+              <input value={startSearch} onChange={(event) => setStartSearch(event.target.value)} placeholder="Search file, startup type, route, or feature name" />
             </label>
           </div>
 
@@ -212,11 +226,11 @@ export function RuntimeMapPanel({ runtimeMap, disabled, onLoad, onOpenExplorer }
               <>
                 <div className="runtime-path-group">
                   <div className="runtime-path-group-heading">
-                    <span>Runnable Stories</span>
+                    <span>Connected starts</span>
                     <strong>{filteredRunnablePathIndexes.length}</strong>
                   </div>
                   {filteredRunnablePathIndexes.length === 0 ? (
-                    <EmptyState label="No connected execution stories yet" />
+                        <EmptyState label="No connected stories match this search" />
                   ) : (
                     filteredRunnablePathIndexes.map(({ path, index }) => (
                       <RuntimeEntryButton
@@ -233,12 +247,12 @@ export function RuntimeMapPanel({ runtimeMap, disabled, onLoad, onOpenExplorer }
                 {detectedOnlyPathIndexes.length > 0 && (
                   <section className="runtime-path-group muted">
                     <div className="runtime-path-group-heading">
-                      <span>Detected Starts</span>
+                      <span>Found, but not connected yet</span>
                       <strong>{filteredDetectedOnlyPathIndexes.length}</strong>
                     </div>
                     <div>
                       {filteredDetectedOnlyPathIndexes.length === 0 ? (
-                        <EmptyState label="No detected starts match the current search" />
+                        <EmptyState label="No unconnected starts match this search" />
                       ) : (
                         filteredDetectedOnlyPathIndexes.map(({ path, index }) => (
                           <RuntimeEntryButton
@@ -260,8 +274,8 @@ export function RuntimeMapPanel({ runtimeMap, disabled, onLoad, onOpenExplorer }
           <div className="runtime-selected-start">
             <div className="runtime-page-heading compact">
               <div>
-                <h3>Selected Start Point</h3>
-                <p>Inspect one start point at a time, then open its source evidence when needed.</p>
+                <h3>Selected way in</h3>
+                <p>Read one start point at a time, then open its exact source evidence when needed.</p>
               </div>
               {selectedFlow !== null && (
                 <div className="runtime-heading-actions">
@@ -296,7 +310,7 @@ export function RuntimeMapPanel({ runtimeMap, disabled, onLoad, onOpenExplorer }
           <div className="runtime-page-heading">
             <div>
               <h3>All Flows</h3>
-              <p>Search and filter flow paths, then open one story or its evidence.</p>
+              <p>Search every connected runtime story. Use this when you already know the feature, API, table, or method you care about.</p>
             </div>
             <span>{filteredFlows.length} shown</span>
           </div>
@@ -304,7 +318,7 @@ export function RuntimeMapPanel({ runtimeMap, disabled, onLoad, onOpenExplorer }
           <div className="runtime-browser-toolbar two-column">
             <label>
               Search flows
-              <input value={flowSearch} onChange={(event) => setFlowSearch(event.target.value)} placeholder="Search flow, start point, step, evidence" />
+              <input value={flowSearch} onChange={(event) => setFlowSearch(event.target.value)} placeholder="Search feature, API, table, method, or evidence" />
             </label>
             <label>
               Category
@@ -337,7 +351,7 @@ export function RuntimeMapPanel({ runtimeMap, disabled, onLoad, onOpenExplorer }
                     <small>{flow.confidence}% confidence - {flow.steps.length} steps</small>
                     <div>
                       <button onClick={() => selectRuntimeFlow(pathIndex, flowIndex, "recommended")}>
-                        <Play size={15} /> Story
+                        <Play size={15} /> Read story
                       </button>
                       <button onClick={() => selectRuntimeFlow(pathIndex, flowIndex, "evidence")}>
                         <BookOpen size={15} /> Evidence
@@ -346,7 +360,7 @@ export function RuntimeMapPanel({ runtimeMap, disabled, onLoad, onOpenExplorer }
                         const target = getExplorerTargetForRuntimeFlow(flow, path);
                         onOpenExplorer(target.surface, target.query, target.selectedItemId);
                       }}>
-                        <Search size={15} /> Drill down
+                        <Search size={15} /> View evidence
                       </button>
                     </div>
                   </div>
@@ -362,13 +376,13 @@ export function RuntimeMapPanel({ runtimeMap, disabled, onLoad, onOpenExplorer }
           <div className="runtime-page-heading">
             <div>
               <h3>Evidence</h3>
-              <p>Review source-backed details for one selected flow.</p>
+              <p>Review the source-backed details behind the selected story. This is where you validate what CodeFlowIQ inferred.</p>
             </div>
             <button onClick={() => setActiveRuntimeView("recommended")} disabled={selectedPath === null}>
-              <Play size={16} /> Back to story
+              <Play size={16} /> Back to readable story
             </button>
             <button onClick={openSelectedFlowInExplorer} disabled={selectedFlow === null}>
-              <Search size={16} /> Open in Explorer
+              <Search size={16} /> Open full evidence
             </button>
           </div>
           <EvidenceDrawer key={`evidence-${selectedResolvedIndex}-${selectedResolvedFlowIndex}`} title={selectedFlow?.title ?? "Flow Evidence"} flows={selectedFlow ? [selectedFlow] : []} />
@@ -436,7 +450,7 @@ function RuntimeEntryButton({ active, index, path, onSelect }: { active: boolean
       <strong>{path.entryPointTitle}</strong>
       <code title={path.entryPointDetail}>{path.entryPointDetail}</code>
       <small className={`runtime-status-badge ${status}`}>{formatRuntimeStatus(status)}</small>
-      <small>{detectedOnly ? "Needs connections" : `${path.flows.length} flows`}</small>
+      <small>{detectedOnly ? "Needs more evidence" : `${path.flows.length} stories`}</small>
     </button>
   );
 }
@@ -477,7 +491,7 @@ function SelectedExecutionPath({ path, pathIndex, selectedFlowIndex, onSelectFlo
       {!detectedOnly && path.flows.length > 1 && (
         <div className="runtime-flow-picker" aria-label="Runtime flows for selected entry point">
           <div className="runtime-flow-picker-heading">
-            <span>Flows under this start point</span>
+            <span>Stories under this start point</span>
             <strong>{path.flows.length}</strong>
           </div>
           <div className="runtime-flow-tabs">
@@ -499,13 +513,13 @@ function SelectedExecutionPath({ path, pathIndex, selectedFlowIndex, onSelectFlo
         <>
           <div className="runtime-story-actions">
             <button onClick={onOpenEvidence}>
-              <BookOpen size={16} /> Open evidence
+              <BookOpen size={16} /> Review evidence
             </button>
             <button onClick={() => {
               const target = getExplorerTargetForRuntimeFlow(selectedFlow, path);
               onOpenExplorer(target.surface, target.query, target.selectedItemId);
             }}>
-              <Search size={16} /> Drill down
+              <Search size={16} /> View full evidence
             </button>
           </div>
           <RuntimeFlowDetail key={`flow-${pathIndex}-${selectedResolvedFlowIndex}`} flow={selectedFlow} />
@@ -547,7 +561,7 @@ function RuntimeFlowDetail({ flow }: { flow: RuntimeFlow }) {
             <span className={`stage-chip ${stageClass(stage)}`} key={stage}>{formatRuntimeCategory(stage)}</span>
           ))}
         </div>
-        <strong>Execution Story</strong>
+        <strong>Readable story</strong>
         <p>{explainRuntimeFlow(flow)}</p>
       </div>
 
@@ -564,7 +578,7 @@ function RuntimeFlowDetail({ flow }: { flow: RuntimeFlow }) {
               </div>
               <strong>{step.title}</strong>
               <details>
-                <summary>Evidence</summary>
+                <summary>Show source detail</summary>
                 <code>{step.detail}</code>
               </details>
             </article>
@@ -581,13 +595,13 @@ function EvidenceDrawer({ title, flows }: { title: string; flows: RuntimeFlow[] 
       <div className="runtime-evidence-header">
         <div>
           <span>{title}</span>
-          <small>Source-backed flow details</small>
+          <small>Source-backed story details</small>
         </div>
         <strong>{flows.length}</strong>
       </div>
       <div className="runtime-flow-list">
         {flows.length === 0 ? (
-          <EmptyState label="No runtime flows detected yet" />
+          <EmptyState label="No runtime stories detected yet" />
         ) : (
           flows.map((flow, index) => (
             <details className="runtime-flow-card" open={index === 0} key={`${flow.category}-${flow.title}-${index}`}>
@@ -760,31 +774,31 @@ function buildRuntimeCoverageSummary(startPoints: number, connected: number, par
 }
 
 function formatRuntimeStatus(status: RuntimeConnectionStatus) {
-  return status === "connected" ? "Connected" : status === "partial" ? "Partially connected" : "Detected only";
+  return status === "connected" ? "Connected story" : status === "partial" ? "Partial story" : "Found only";
 }
 
 function formatRuntimeEvidenceQuality(quality: RuntimeEvidenceQuality) {
-  return quality === "exact" ? "Exact evidence" : quality === "inferred" ? "Inferred link" : "Missing link";
+  return quality === "exact" ? "Source-backed" : quality === "inferred" ? "Likely link" : "Needs evidence";
 }
 
 function getRuntimeQualityMessage(path: RuntimeExecutionPath, flow: RuntimeFlow | null, status: RuntimeConnectionStatus, quality: RuntimeEvidenceQuality) {
   if (status === "detected-only") {
-    return "CodeFlowIQ found the start file, but the current index has not found a downstream runtime relationship from it yet.";
+    return "CodeFlowIQ found where this might start, but it has not found the next step yet.";
   }
 
   if (flow === null) {
-    return "Select a flow to inspect its evidence quality.";
+    return "Select a story to inspect how strong the evidence is.";
   }
 
   if (quality === "inferred") {
-    return "This flow is connected by a project/domain fallback. Treat it as a useful lead, then inspect the evidence before relying on it as an exact call chain.";
+    return "This story is a useful lead, but some links are inferred from nearby code or naming. Review the evidence before relying on it.";
   }
 
   if (runtimeFlowTouchesLayer(flow, ["database", "procedure", "sql", "table"])) {
-    return "This flow has source-backed runtime steps and reaches SQL, procedures, or database tables.";
+    return "This story has source-backed steps and reaches SQL, procedures, or database tables.";
   }
 
-  return `${path.entryPointTitle} is connected through source-backed runtime steps, but this selected flow does not yet reach SQL/data evidence.`;
+  return `${path.entryPointTitle} is connected through source-backed steps, but this selected story does not yet reach SQL/data evidence.`;
 }
 
 function runtimePathMatchesQuery(path: RuntimeExecutionPath, query: string) {

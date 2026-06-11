@@ -4,6 +4,62 @@
   padding: 14px;
 }
 
+.chain-pagination {
+  align-items: center;
+  background: var(--surface-muted);
+  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  min-height: 58px;
+  padding: 10px 14px;
+}
+
+.chain-pagination > div:first-child {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.chain-pagination strong {
+  color: var(--text-strong);
+  font-size: 20px;
+}
+
+.chain-pagination span,
+.chain-pagination small {
+  color: var(--text-muted);
+}
+
+.chain-pagination small {
+  font-size: 12px;
+}
+
+.chain-pagination-actions {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.chain-pagination-actions button {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 10px;
+}
+
+.chain-pagination-actions span {
+  color: var(--text-muted);
+  font-size: 12px;
+  min-width: 86px;
+  text-align: center;
+}
+
 .chain-card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -175,6 +231,15 @@
   overflow-wrap: anywhere;
 }
 
+.chain-step-explorer {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+  justify-self: start;
+  min-height: 30px;
+  padding: 0 10px;
+}
+
 .story-step div span {
   color: var(--text-soft);
   font-size: 12px;
@@ -208,9 +273,15 @@
   align-items: center;
   display: grid;
   gap: 8px;
-  grid-template-columns: 42px 150px minmax(0, 1fr);
+  grid-template-columns: 42px 150px minmax(0, 1fr) auto;
   margin-left: calc(var(--depth) * 16px);
   min-height: 32px;
+}
+
+.chain-step-explorer.compact {
+  min-height: 30px;
+  min-width: 34px;
+  padding: 0;
 }
 
 .stage-marker {
@@ -286,4 +357,19 @@
 
 .chain-step.azure code {
   border-left: 4px solid var(--stage-azure-text);
+}
+
+@media (max-width: 760px) {
+  .chain-pagination {
+    align-items: stretch;
+    display: grid;
+  }
+
+  .chain-pagination-actions {
+    justify-content: space-between;
+  }
+
+  .chain-pagination-actions span {
+    min-width: 0;
+  }
 }

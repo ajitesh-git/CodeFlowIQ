@@ -95,6 +95,15 @@ public sealed class WorkspaceQueryService : IWorkspaceQueryService
         CancellationToken cancellationToken) =>
         _inventory.ListRepositoryExplorerItemsAsync(workspacePath, surface, queryText, selectedItemId, includeTests, take, cancellationToken);
 
+    public Task<IReadOnlyList<RepositoryExplorerRelatedGroup>> ListRepositoryExplorerRelatedItemsAsync(
+        string workspacePath,
+        string surface,
+        string itemId,
+        bool includeTests,
+        int take,
+        CancellationToken cancellationToken) =>
+        _inventory.ListRepositoryExplorerRelatedItemsAsync(workspacePath, surface, itemId, includeTests, take, cancellationToken);
+
     public Task<IReadOnlyList<string>> ListFlowsAsync(
         string workspacePath,
         string? apiText,

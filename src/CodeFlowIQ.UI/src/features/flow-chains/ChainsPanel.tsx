@@ -1,12 +1,15 @@
-import { Check, Copy, Network, Search } from "lucide-react";
-import { CSSProperties, useState } from "react";
+import { Check, ChevronLeft, ChevronRight, Copy, Network, Search } from "lucide-react";
+import { CSSProperties, useEffect, useMemo, useState } from "react";
 import { EmptyState } from "../../components/common/EmptyState";
+import { FeatureIntro } from "../../components/common/FeatureIntro";
+import { getExplorerTargetForChainStep, type ExplorerDrillTarget } from "../repository-explorer";
 import "./flow-chains.css";
 
 type ParsedChainStep = {
   depth: number;
   relationship: string | null;
   target: string;
+  evidenceItemId: string | null;
   kind: string;
   displayName: string;
   stage: "frontend" | "api" | "backend" | "database" | "azure" | "unknown";
@@ -22,7 +25,10 @@ type ChainsPanelProps = {
   onTargetFilterChange: (value: string) => void;
   onChainLimitChange: (value: number) => void;
   onLoad: (apiOverride?: string, targetOverride?: string, takeOverride?: number) => void;
+  onOpenExplorer: (target: ExplorerDrillTarget) => void;
 };
+
+const chainsPerPage = 25;
 
 export function ChainsPanel({
   apiFilter,
@@ -33,66 +39,166 @@ export function ChainsPanel({
   onApiFilterChange,
   onTargetFilterChange,
   onChainLimitChange,
-  onLoad
+  onLoad,
+  onOpenExplorer
 }: ChainsPanelProps) {
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageCount = Math.max(1, Math.ceil(chains.length / chainsPerPage));
+  const safeCurrentPage = Math.min(currentPage, pageCount);
+  const pageStartIndex = (safeCurrentPage - 1) * chainsPerPage;
+  const visibleChains = useMemo(
+    () => chains.slice(pageStartIndex, pageStartIndex + chainsPerPage),
+    [chains, pageStartIndex]
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [chains]);
+
+  useEffect(() => {
+    if (currentPage > pageCount) {
+      setCurrentPage(pageCount);
+    }
+  }, [currentPage, pageCount]);
+
   async function copyAllChains() {
     if (chains.length === 0) {
       return;
     }
 
-    await navigator.clipboard.writeText(chains.join("\n\n"));
+    await navigator.clipboard.writeText(chains.map(cleanChainEvidenceMetadata).join("\n\n"));
   }
 
   return (
     <div className="flow-layout">
+      <FeatureIntro
+        title="End-to-End Flow Chains"
+        description="Trace one business path across UI, API, backend code, database objects, and cloud services. Each chain is shown first as a readable story, with the technical trace kept underneath."
+        helper="Use this page when you want to answer: if this API or feature runs, what does it eventually touch?"
+      />
       <div className="toolbar">
         <label>
-          API filter
-          <input value={apiFilter} onChange={(event) => onApiFilterChange(event.target.value)} />
+          Starting API or feature
+          <input placeholder="Example: register, login, account" value={apiFilter} onChange={(event) => onApiFilterChange(event.target.value)} />
         </label>
         <label>
-          Target
-          <input value={targetFilter} onChange={(event) => onTargetFilterChange(event.target.value)} />
+          Data or dependency target
+          <input placeholder="Example: Users, invoice, Service Bus" value={targetFilter} onChange={(event) => onTargetFilterChange(event.target.value)} />
         </label>
         <label className="short-field">
-          Take
+          Limit
           <input
             min={1}
-            max={50}
+            max={1000}
             type="number"
             value={chainLimit}
             onChange={(event) => onChainLimitChange(Number(event.target.value))}
           />
         </label>
         <button onClick={() => onLoad()} disabled={disabled}>
-          <Network size={17} /> Trace
+          <Network size={17} /> Trace flow
         </button>
         <button onClick={() => {
           onApiFilterChange("");
           onTargetFilterChange("");
-          onChainLimitChange(50);
-          onLoad("", "", 50);
+          onChainLimitChange(1000);
+          onLoad("", "", 1000);
         }} disabled={disabled}>
-          <Search size={17} /> Browse all
+          <Search size={17} /> Browse all chains
         </button>
         <button onClick={copyAllChains} disabled={chains.length === 0}>
-          <Copy size={17} /> Copy
+          <Copy size={17} /> Copy all
         </button>
       </div>
+      {chains.length > 0 && (
+        <ChainPagination
+          currentPage={safeCurrentPage}
+          end={Math.min(pageStartIndex + visibleChains.length, chains.length)}
+          onPageChange={setCurrentPage}
+          pageCount={pageCount}
+          pageSize={chainsPerPage}
+          start={pageStartIndex + 1}
+          total={chains.length}
+        />
+      )}
       <div className="chain-list">
         {chains.length === 0 ? (
-          <EmptyState label="No chains loaded" />
+          <EmptyState label="No flow chains loaded yet. Add a filter or browse all chains." />
         ) : (
-          chains.map((chain, index) => (
-            <ChainCard chain={chain} index={index} key={`${chain}-${index}`} />
+          visibleChains.map((chain, index) => (
+            <ChainCard
+              chain={chain}
+              index={pageStartIndex + index}
+              isFirstVisible={index === 0}
+              key={`${chain}-${pageStartIndex + index}`}
+              onOpenExplorer={onOpenExplorer}
+            />
           ))
         )}
+      </div>
+      {chains.length > chainsPerPage && (
+        <ChainPagination
+          currentPage={safeCurrentPage}
+          end={Math.min(pageStartIndex + visibleChains.length, chains.length)}
+          onPageChange={setCurrentPage}
+          pageCount={pageCount}
+          pageSize={chainsPerPage}
+          start={pageStartIndex + 1}
+          total={chains.length}
+        />
+      )}
+    </div>
+  );
+}
+
+function ChainPagination({
+  currentPage,
+  end,
+  onPageChange,
+  pageCount,
+  pageSize,
+  start,
+  total
+}: {
+  currentPage: number;
+  end: number;
+  onPageChange: (page: number) => void;
+  pageCount: number;
+  pageSize: number;
+  start: number;
+  total: number;
+}) {
+  return (
+    <div className="chain-pagination" aria-label="Flow chain pagination">
+      <div>
+        <strong>{total}</strong>
+        <span>loaded chains</span>
+        <small>Showing {start}-{end} in pages of {pageSize}</small>
+      </div>
+      <div className="chain-pagination-actions">
+        <button onClick={() => onPageChange(currentPage - 1)} disabled={currentPage <= 1}>
+          <ChevronLeft size={16} /> Previous
+        </button>
+        <span>Page {currentPage} of {pageCount}</span>
+        <button onClick={() => onPageChange(currentPage + 1)} disabled={currentPage >= pageCount}>
+          Next <ChevronRight size={16} />
+        </button>
       </div>
     </div>
   );
 }
 
-function ChainCard({ chain, index }: { chain: string; index: number }) {
+function ChainCard({
+  chain,
+  index,
+  isFirstVisible,
+  onOpenExplorer
+}: {
+  chain: string;
+  index: number;
+  isFirstVisible: boolean;
+  onOpenExplorer: (target: ExplorerDrillTarget) => void;
+}) {
   const steps = parseChain(chain);
   const [copied, setCopied] = useState(false);
   const start = steps[0]?.displayName ?? "Flow chain";
@@ -101,13 +207,13 @@ function ChainCard({ chain, index }: { chain: string; index: number }) {
   const headline = buildFlowHeadline(steps);
 
   async function copyChain() {
-    await navigator.clipboard.writeText(chain);
+    await navigator.clipboard.writeText(cleanChainEvidenceMetadata(chain));
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1200);
   }
 
   return (
-    <details className="chain-card" open={index === 0}>
+    <details className="chain-card" open={isFirstVisible}>
       <summary>
         <Network size={16} />
         <span>{headline}</span>
@@ -115,11 +221,11 @@ function ChainCard({ chain, index }: { chain: string; index: number }) {
       </summary>
       <div className="chain-overview">
         <div>
-          <span>Entry point</span>
+          <span>Where it starts</span>
           <strong>{start}</strong>
         </div>
         <div>
-          <span>Final dependency</span>
+          <span>Where it ends</span>
           <strong>{end}</strong>
         </div>
         <div className="stage-strip" aria-label="Chain stage counts">
@@ -142,12 +248,19 @@ function ChainCard({ chain, index }: { chain: string; index: number }) {
             <div>
               <strong>{describeStepTitle(step, stepIndex)}</strong>
               <span>{describeStepDetail(step)}</span>
+              <button
+                className="chain-step-explorer"
+                onClick={() => onOpenExplorer(getExplorerTargetForChainStep(step.kind, step.target, step.evidenceItemId))}
+                type="button"
+              >
+                <Search size={15} /> View evidence
+              </button>
             </div>
           </li>
         ))}
       </ol>
       <details className="technical-trace">
-        <summary>Technical trace</summary>
+        <summary>Show technical trace</summary>
         <ol className="chain-steps">
           {steps.map((step, stepIndex) => (
             <li
@@ -158,6 +271,13 @@ function ChainCard({ chain, index }: { chain: string; index: number }) {
               <span className={`stage-marker ${step.stage}`}>{stageLabel(step.stage)}</span>
               {step.relationship && <span className={`edge-label ${edgeClass(step.relationship)}`}>{formatRelationship(step.relationship)}</span>}
               <code title={step.target}>{step.target}</code>
+              <button
+                className="chain-step-explorer compact"
+                onClick={() => onOpenExplorer(getExplorerTargetForChainStep(step.kind, step.target, step.evidenceItemId))}
+                type="button"
+              >
+                <Search size={14} />
+              </button>
             </li>
           ))}
         </ol>
@@ -188,15 +308,34 @@ function parseChain(chain: string): ParsedChainStep[] {
 }
 
 function toParsedStep(depth: number, relationship: string | null, target: string): ParsedChainStep {
-  const kind = target.includes(":") ? target.slice(0, target.indexOf(":")) : "unknown";
+  const { evidenceItemId, targetText } = parseStepTargetMetadata(target);
+  const kind = targetText.includes(":") ? targetText.slice(0, targetText.indexOf(":")) : "unknown";
   return {
     depth,
     relationship,
-    target,
+    target: targetText,
+    evidenceItemId,
     kind,
-    displayName: formatTargetName(target),
-    stage: classifyStage(kind, target)
+    displayName: formatTargetName(targetText),
+    stage: classifyStage(kind, targetText)
   };
+}
+
+function parseStepTargetMetadata(target: string) {
+  const parts = target.split("\t").map((part) => part.trim()).filter(Boolean);
+  const evidenceItemId = parts.find((part) => /^relationship:\d+$/i.test(part)) ?? null;
+  const targetText = parts.filter((part) => !/^relationship:\d+$/i.test(part)).join("\t") || target;
+  return { evidenceItemId, targetText };
+}
+
+function cleanChainEvidenceMetadata(chain: string) {
+  return chain
+    .split(/\r?\n/)
+    .map((line) => line
+      .split("\t")
+      .filter((part) => !/^relationship:\d+$/i.test(part.trim()))
+      .join("\t"))
+    .join("\n");
 }
 
 function buildFlowHeadline(steps: ParsedChainStep[]) {
@@ -296,9 +435,9 @@ function stageLabel(stage: ParsedChainStep["stage"]) {
   return {
     frontend: "UI",
     api: "API",
-    backend: "BE",
-    database: "DB",
-    azure: "AZ",
+    backend: "Code",
+    database: "Data",
+    azure: "Cloud",
     unknown: "?"
   }[stage];
 }

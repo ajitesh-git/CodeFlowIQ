@@ -27,7 +27,7 @@ export function WorkspaceBar({
     <section className="workspace-bar">
       <form onSubmit={submitWorkspace}>
         <label>
-          Workspace
+          Repository folder
           <input
             placeholder="C:\\Users\\ajite\\Downloads\\Compressed\\deloitte-omnia-financial-be"
             value={workspacePath}
@@ -35,13 +35,13 @@ export function WorkspaceBar({
           />
         </label>
         <button type="button" onClick={onInitialize} disabled={disabled}>
-          <Play size={17} /> Init
+          <Play size={17} /> Index repo
         </button>
         <button type="button" onClick={onSync} disabled={disabled}>
-          <RefreshCw size={17} /> Sync
+          <RefreshCw size={17} /> Refresh index
         </button>
         <button type="submit" disabled={disabled}>
-          <Search size={17} /> Load
+          <Search size={17} /> Load insights
         </button>
       </form>
     </section>

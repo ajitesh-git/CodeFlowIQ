@@ -1,5 +1,7 @@
 import { FolderTree, Search } from "lucide-react";
+import { FeatureIntro } from "../../components/common/FeatureIntro";
 import { ResultExplorer } from "../../components/common/ResultExplorer";
+import { getExplorerTargetForPreviewRow, type ExplorerDrillTarget } from "../repository-explorer";
 
 type FilesPanelProps = {
   languageFilter: string;
@@ -9,6 +11,7 @@ type FilesPanelProps = {
   onLanguageFilterChange: (value: string) => void;
   onFolderFilterChange: (value: string) => void;
   onLoad: (languageOverride?: string, folderOverride?: string, take?: number) => void;
+  onOpenExplorer: (target: ExplorerDrillTarget) => void;
 };
 
 export function FilesPanel({
@@ -18,35 +21,42 @@ export function FilesPanel({
   disabled,
   onLanguageFilterChange,
   onFolderFilterChange,
-  onLoad
+  onLoad,
+  onOpenExplorer
 }: FilesPanelProps) {
   return (
     <div className="flow-layout">
+      <FeatureIntro
+        title="Files and Folders"
+        description="Browse the files CodeFlowIQ indexed, grouped by language or folder. This is the simplest way to confirm what the tool can see."
+        helper="Use this page when a result looks incomplete: first check whether the file or folder was indexed."
+      />
       <div className="toolbar">
         <label>
           Language
-          <input placeholder="csharp, sql, javascript" value={languageFilter} onChange={(event) => onLanguageFilterChange(event.target.value)} />
+          <input placeholder="Example: csharp, sql, javascript" value={languageFilter} onChange={(event) => onLanguageFilterChange(event.target.value)} />
         </label>
         <label>
           Folder
-          <input placeholder="Client or Deloitte.Omnia.FinancialFacts" value={folderFilter} onChange={(event) => onFolderFilterChange(event.target.value)} />
+          <input placeholder="Example: Client, Api, Data" value={folderFilter} onChange={(event) => onFolderFilterChange(event.target.value)} />
         </label>
         <button onClick={() => onLoad()} disabled={disabled}>
-          <FolderTree size={17} /> Files
+          <FolderTree size={17} /> Show matching files
         </button>
         <button onClick={() => {
           onLanguageFilterChange("");
           onFolderFilterChange("");
           onLoad("", "", 1000);
         }} disabled={disabled}>
-          <Search size={17} /> Browse all
+          <Search size={17} /> Browse all files
         </button>
       </div>
       <ResultExplorer
-        emptyLabel="No files loaded"
+        emptyLabel="No files loaded yet. Choose a language/folder filter or browse all files."
         loadedLabel="files"
         rows={rows}
-        searchPlaceholder="Search path, folder, language"
+        searchPlaceholder="Search file path, folder, or language"
+        onOpenRow={(row) => onOpenExplorer(getExplorerTargetForPreviewRow("files", row))}
       />
     </div>
   );

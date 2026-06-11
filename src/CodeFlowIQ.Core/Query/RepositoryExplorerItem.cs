@@ -13,4 +13,9 @@ public sealed record RepositoryExplorerItem(
     string? TargetIdentifier,
     string? FilePath,
     int? LineNumber,
-    string? Metadata);
+    string? Metadata,
+    string? DisplayTitle = null,
+    string? DisplaySubtitle = null,
+    string? DisplayLocator = null,
+    string? EvidenceSummary = null,
+    string? OccurrenceKey = null);

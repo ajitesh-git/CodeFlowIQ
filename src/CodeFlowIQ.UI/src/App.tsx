@@ -61,7 +61,9 @@ export function App() {
               runtimeMap={workspace.runtimeMap}
               disabled={queryDisabled}
               onLoad={workspace.loadRuntimeMap}
-              onOpenExplorer={workspace.openRepositoryExplorer}
+              onOpenExplorer={(surface, query, selectedItemId) =>
+                workspace.openRepositoryExplorer(surface, query, selectedItemId, "Runtime Map")
+              }
             />
           )}
           {workspace.activePanel === "explorer" && (
@@ -69,14 +71,21 @@ export function App() {
               activeSurface={workspace.repositoryExplorerSurface}
               incomingQuery={workspace.repositoryExplorerQuery}
               incomingSelectedItemId={workspace.repositoryExplorerSelectedItemId}
+              incomingOriginLabel={workspace.repositoryExplorerOrigin}
               rowsBySurface={workspace.repositoryExplorerRows}
               disabled={queryDisabled}
               onSurfaceChange={workspace.setRepositoryExplorerSurface}
               onLoadSurface={workspace.loadRepositoryExplorerSurface}
               onLoadAll={workspace.loadRepositoryExplorerAll}
+              onLoadRelatedEvidence={workspace.loadRepositoryExplorerRelatedEvidence}
             />
           )}
-          {workspace.activePanel === "summary" && <SummaryPanel summary={workspace.summary} />}
+          {workspace.activePanel === "summary" && (
+            <SummaryPanel
+              summary={workspace.summary}
+              onOpenExplorer={(target) => workspace.openExplorerTarget(target, "Repo snapshot")}
+            />
+          )}
           {workspace.activePanel === "chains" && (
             <ChainsPanel
               apiFilter={workspace.apiFilter}
@@ -88,10 +97,16 @@ export function App() {
               onTargetFilterChange={workspace.setTargetFilter}
               onChainLimitChange={workspace.setChainLimit}
               onLoad={workspace.loadChains}
+              onOpenExplorer={(target) => workspace.openExplorerTarget(target, "End-to-end flows")}
             />
           )}
           {workspace.activePanel === "backend" && (
-            <BackendPanel rows={workspace.backendRows} disabled={queryDisabled} onLoad={workspace.loadBackendRows} />
+            <BackendPanel
+              rows={workspace.backendRows}
+              disabled={queryDisabled}
+              onLoad={workspace.loadBackendRows}
+              onOpenExplorer={(target) => workspace.openExplorerTarget(target, "Backend & data")}
+            />
           )}
           {workspace.activePanel === "apis" && (
             <ApiSurfacePanel
@@ -100,6 +115,7 @@ export function App() {
               disabled={queryDisabled}
               onApiFilterChange={workspace.setApiFilter}
               onLoad={workspace.loadApiRows}
+              onOpenExplorer={(target) => workspace.openExplorerTarget(target, "API endpoints")}
             />
           )}
           {workspace.activePanel === "azure" && (
@@ -109,6 +125,7 @@ export function App() {
               disabled={queryDisabled}
               onServiceFilterChange={workspace.setAzureFilter}
               onLoad={workspace.loadAzureRows}
+              onOpenExplorer={(target) => workspace.openExplorerTarget(target, "Cloud services")}
             />
           )}
           {workspace.activePanel === "files" && (
@@ -120,6 +137,7 @@ export function App() {
               onLanguageFilterChange={workspace.setFileLanguageFilter}
               onFolderFilterChange={workspace.setFileFolderFilter}
               onLoad={workspace.loadFileRows}
+              onOpenExplorer={(target) => workspace.openExplorerTarget(target, "Files indexed")}
             />
           )}
         </section>

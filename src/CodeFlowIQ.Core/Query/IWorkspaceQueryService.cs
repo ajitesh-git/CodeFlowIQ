@@ -40,6 +40,14 @@ public interface IWorkspaceQueryService
         int take,
         CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<RepositoryExplorerRelatedGroup>> ListRepositoryExplorerRelatedItemsAsync(
+        string workspacePath,
+        string surface,
+        string itemId,
+        bool includeTests,
+        int take,
+        CancellationToken cancellationToken);
+
     Task<IReadOnlyList<string>> ListFlowsAsync(
         string workspacePath,
         string? apiText,
