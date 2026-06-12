@@ -26,6 +26,28 @@ It is especially relevant for:
 - Engineering leaders who care about onboarding, maintainability, and local-first analysis.
 - Developers trying to answer, "Where does this request actually go?"
 
+## Screenshots
+
+### Start Here: Repository Overview
+
+![CodeFlowIQ Start Here overview](docs/assets/screenshots/overview-start-here.png)
+
+### Runtime Map: Recommended Runtime Stories
+
+![CodeFlowIQ Runtime Map](docs/assets/screenshots/runtime-map.png)
+
+### End-to-End Flows: API to Backend/Data Paths
+
+![CodeFlowIQ End-to-End Flows](docs/assets/screenshots/end-to-end-flows.png)
+
+### API Endpoints: Route Discovery
+
+![CodeFlowIQ API Endpoints](docs/assets/screenshots/api-endpoints.png)
+
+### C# Backend Trace: Debugger-Style Execution Path
+
+![CodeFlowIQ C# Backend Trace](docs/assets/screenshots/csharp-backend-trace.png)
+
 ## Why This Project Stands Out
 
 CodeFlowIQ is more than code search. It is a developer experience layer on top of static analysis.
@@ -53,28 +75,6 @@ Instead of throwing raw search results at the user, it answers high-value engine
 - Which SQL tables or stored procedures are touched?
 - Which Azure services are involved?
 - Which parts of the flow are exact, inferred, partial, duplicated, or unresolved?
-
-## Screenshots
-
-### Start Here: Repository Overview
-
-![CodeFlowIQ Start Here overview](docs/assets/screenshots/overview-start-here.png)
-
-### Runtime Map: Recommended Runtime Stories
-
-![CodeFlowIQ Runtime Map](docs/assets/screenshots/runtime-map.png)
-
-### End-to-End Flows: API to Backend/Data Paths
-
-![CodeFlowIQ End-to-End Flows](docs/assets/screenshots/end-to-end-flows.png)
-
-### API Endpoints: Route Discovery
-
-![CodeFlowIQ API Endpoints](docs/assets/screenshots/api-endpoints.png)
-
-### C# Backend Trace: Debugger-Style Execution Path
-
-![CodeFlowIQ C# Backend Trace](docs/assets/screenshots/csharp-backend-trace.png)
 
 ## Portfolio Value
 
