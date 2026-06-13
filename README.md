@@ -12,6 +12,7 @@
 [![Runtime Map](https://img.shields.io/badge/Runtime-Map-D97706?style=for-the-badge)](#core-differentiators)
 [![C%23 Trace](https://img.shields.io/badge/C%23-Backend%20Trace-B91C1C?style=for-the-badge)](#core-differentiators)
 [![Local First](https://img.shields.io/badge/Local-First-0F766E?style=for-the-badge)](#why-this-project-stands-out)
+[![License: MIT](https://img.shields.io/badge/License-MIT-84CC16?style=for-the-badge)](LICENSE)
 
 ## Local-First Code Intelligence For Enterprise Repositories
 
@@ -440,4 +441,4 @@ Near-term priorities:
 
 ## License
 
-Add the project license here when the repository is ready for distribution.
+CodeFlowIQ is released under the [MIT License](LICENSE).
